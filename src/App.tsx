@@ -141,9 +141,23 @@ export default function App() {
     setLoading(true);
     setTxLog('');
 
+    // Auto stop after 30 seconds if transaction hangs
+    const timeout = setTimeout(() => {
+      setLoading(false);
+      setTxLog('Error: Transaction timed out. Please try again.');
+    }, 30000);
+
     try {
       const { commitmentHash } = await submitToArcium({ size: usdValue, direction, leverage });
-      const tx = await openPosition({ connection, publicKey, sendTransaction, direction: direction === 'LONG' ? 0 : 1, leverage, commitmentHash });
+      const tx = await openPosition({
+        connection,
+        publicKey,
+        sendTransaction,
+        direction: direction === 'LONG' ? 0 : 1,
+        leverage,
+        commitmentHash
+      });
+      clearTimeout(timeout);
       setTxLog(`Position submitted. TX: ${tx}`);
       setPositions(prev => [...prev, {
         id: Date.now(), market, direction,
@@ -164,9 +178,11 @@ export default function App() {
       }]);
       setSizeNative('');
     } catch (e: any) {
+      clearTimeout(timeout);
       setTxLog(`Error: ${e.message}`);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   function setPresetSize(pct: number) {
@@ -432,7 +448,7 @@ export default function App() {
               <div className="psm"><span className="psm-l">POSITIONS</span><span className="psm-r">{positions.length}</span></div>
             </div>
 
-            {/* SCROLLING TICKER ONLY */}
+            {/* SCROLLING TICKER */}
             <div className="ps-ticker-wrap">
               <div className="ps-ticker-track">
                 <span>SIGILLION PRIVATE PERPS</span>
@@ -458,7 +474,7 @@ export default function App() {
               </div>
             </div>
           </div>
-          {/* END POS-STRIP — arcium-info block removed */}
+          {/* END POS-STRIP */}
 
           {/* ORDER BOOK */}
           <aside className="book desktop-only">

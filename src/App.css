@@ -59,36 +59,69 @@ body::before {
   background: var(--surf); border-bottom: 1px solid var(--b1);
   flex-shrink: 0; position: relative; z-index: 100;
 }
+
+@media (max-width: 768px) {
+  .navbar { padding: 0 10px; gap: 6px; }
+}
+
 .navbar::after {
   content: ''; position: absolute; bottom: -1px; left: 0; right: 0; height: 1px;
   background: linear-gradient(90deg, transparent, var(--acc), var(--blue), transparent);
   opacity: 0.3;
 }
 
-.brand { display: flex; align-items: center; gap: 10px; cursor: pointer; }
+.brand { display: flex; align-items: center; gap: 10px; cursor: pointer; flex-shrink: 0; }
+
+@media (max-width: 768px) {
+  .brand { gap: 6px; }
+}
+
 .brand-gem {
   width: 32px; height: 32px;
   display: flex; align-items: center; justify-content: center;
   background: linear-gradient(135deg, var(--acc), var(--blue));
   color: #000; font-family: 'Orbitron', monospace;
   font-weight: 900; font-size: 0.9rem;
-  border-radius: 6px;
+  border-radius: 6px; flex-shrink: 0;
 }
+
+@media (max-width: 768px) {
+  .brand-gem { width: 28px; height: 28px; font-size: 0.75rem; }
+}
+
 .brand-name { font-family: 'Orbitron', monospace; font-size: 0.78rem; font-weight: 900; color: var(--txt2); letter-spacing: 0.22em; }
 .brand-tag { font-family: 'Space Mono', monospace; font-size: 0.44rem; color: var(--acc); letter-spacing: 0.12em; opacity: 0.6; }
+
+@media (max-width: 768px) {
+  .brand-name { font-size: 0.6rem; letter-spacing: 0.12em; }
+  .brand-tag { display: none; }
+}
 
 .nav-tabs { display: flex; }
 .nt { background: transparent; border: none; border-bottom: 2px solid transparent; color: var(--muted); padding: 0 16px; height: 48px; cursor: pointer; font-family: 'Inter', sans-serif; font-weight: 600; font-size: 0.65rem; letter-spacing: 0.14em; text-transform: uppercase; transition: all 0.2s; }
 .nt:hover { color: var(--txt); }
 .nt-active { color: var(--acc); border-bottom-color: var(--acc); }
 
-.nav-right { display: flex; align-items: center; gap: 8px; }
+.nav-right {
+  display: flex; align-items: center; gap: 8px;
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+@media (max-width: 768px) {
+  .nav-right { gap: 4px; }
+}
 
 .devnet-badge {
   font-family: 'Space Mono', monospace; font-size: 0.55rem; font-weight: 700;
   color: var(--acc); background: rgba(0,245,196,0.08);
   border: 1px solid rgba(0,245,196,0.25);
   padding: 3px 8px; border-radius: 2px; letter-spacing: 0.1em;
+  flex-shrink: 0;
+}
+
+@media (max-width: 768px) {
+  .devnet-badge { display: none; }
 }
 
 .wallet-bal {
@@ -96,6 +129,11 @@ body::before {
   background: rgba(0,245,196,0.05); border: 1px solid rgba(0,245,196,0.15);
   padding: 4px 10px; border-radius: 3px;
 }
+
+@media (max-width: 768px) {
+  .wallet-bal { display: none !important; }
+}
+
 .wb-sym { font-family: 'Space Mono', monospace; font-size: 0.52rem; color: var(--acc); }
 .wb-amt { font-family: 'Orbitron', monospace; font-size: 0.62rem; font-weight: 700; color: var(--txt2); }
 
@@ -103,8 +141,22 @@ body::before {
 .mxe-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--long); box-shadow: 0 0 5px var(--long); animation: pd 2s ease-in-out infinite; }
 @keyframes pd { 0%,100%{opacity:1;} 50%{opacity:0.3;} }
 
-.hamburger { background: transparent; border: 1px solid var(--b2); color: var(--txt2); width: 32px; height: 32px; border-radius: 4px; cursor: pointer; font-size: 1rem; align-items: center; justify-content: center; transition: all 0.2s; }
+.hamburger { background: transparent; border: 1px solid var(--b2); color: var(--txt2); width: 32px; height: 32px; border-radius: 4px; cursor: pointer; font-size: 1rem; align-items: center; justify-content: center; transition: all 0.2s; flex-shrink: 0; }
 .hamburger:hover { border-color: var(--acc); color: var(--acc); }
+
+/* Wallet button mobile size fix */
+@media (max-width: 768px) {
+  .wallet-adapter-button {
+    font-size: 0.6rem !important;
+    padding: 6px 10px !important;
+    height: 32px !important;
+    min-width: 0 !important;
+    max-width: 120px !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+  }
+}
 
 /* Mobile nav */
 .mobile-nav { display: flex; flex-direction: column !important; background: var(--surf); border-bottom: 1px solid var(--b1); z-index: 99; flex-shrink: 0; }
@@ -351,7 +403,6 @@ body::before {
   flex-direction: column;
 }
 
-/* Desktop: anchored to bottom of body, sits flush */
 @media (min-width: 769px) {
   .pos-strip {
     position: absolute;
