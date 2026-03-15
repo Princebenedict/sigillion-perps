@@ -135,12 +135,7 @@ vercel --prod
 
 ---
 
-## Disclaimer
 
-This project is for educational and experimental purposes.
-It is **not financial advice** and should not be used for production trading without proper audits.
-
----
 
 ## License
 
