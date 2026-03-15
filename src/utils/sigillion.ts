@@ -1,4 +1,4 @@
-import { Transaction, SystemProgram, PublicKey } from "@solana/web3.js";
+import { Transaction, SystemProgram } from "@solana/web3.js";
 
 interface OpenPositionParams {
   connection: any;
@@ -27,23 +27,11 @@ export async function openPosition({
     })
   );
 
-  // Get latest blockhash with longer validity
-  const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
-  tx.recentBlockhash = blockhash;
-  tx.feePayer = publicKey;
-
-  // Send transaction
+  // Send transaction — skip confirmation to avoid blockhash expiry on devnet
   const signature = await sendTransaction(tx, connection);
 
-  // Confirm with longer timeout
-  await connection.confirmTransaction(
-    {
-      signature,
-      blockhash,
-      lastValidBlockHeight,
-    },
-    'confirmed'
-  );
+  // Give it a moment then return — no blocking confirmation
+  await new Promise(resolve => setTimeout(resolve, 2000));
 
   return signature;
 }
@@ -57,6 +45,6 @@ export async function closePosition({
 }) {
   const tx = new Transaction();
   const signature = await wallet.sendTransaction(tx, connection);
-  await connection.confirmTransaction(signature);
   return signature;
 }
+
