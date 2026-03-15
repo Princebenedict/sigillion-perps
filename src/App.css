@@ -645,3 +645,54 @@ body::before {
 .accent { color: var(--acc); }
 .purple { color: var(--purple); }
 .muted { color: var(--muted); }
+
+/* ══ WALLET MODAL MOBILE FIX ══ */
+@media (max-width: 768px) {
+  .wallet-adapter-modal-wrapper {
+    width: 90% !important;
+    max-width: 380px !important;
+    margin: 0 auto !important;
+    border-radius: 12px !important;
+  }
+
+  .wallet-adapter-modal-title {
+    font-size: 1.2rem !important;
+    text-align: center !important;
+    padding: 0 16px !important;
+  }
+
+  .wallet-adapter-modal-list {
+    padding: 0 12px !important;
+  }
+
+  .wallet-adapter-modal-list li {
+    width: 100% !important;
+  }
+
+  .wallet-adapter-button {
+    width: 100% !important;
+    font-size: 0.85rem !important;
+    padding: 12px 16px !important;
+    justify-content: flex-start !important;
+    gap: 12px !important;
+  }
+
+  .wallet-adapter-button-start-icon {
+    width: 28px !important;
+    height: 28px !important;
+  }
+
+  .wallet-adapter-modal-list-more {
+    font-size: 0.75rem !important;
+  }
+
+  .wallet-adapter-modal-middle {
+    padding: 16px !important;
+  }
+
+  .wallet-adapter-modal-middle-button {
+    width: 100% !important;
+    font-size: 0.85rem !important;
+  }
+}
+
