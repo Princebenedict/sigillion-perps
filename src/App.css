@@ -695,4 +695,11 @@ body::before {
     font-size: 0.85rem !important;
   }
 }
+/* ══ PNL PERCENTAGE ══ */
+.psm-pct {
+  font-family: 'Space Mono', monospace;
+  font-size: 0.44rem;
+  letter-spacing: 0.06em;
+}
+
 

@@ -82,6 +82,7 @@ export default function App() {
   const usdValue = nativeAmount * tick.price;
   const notional = usdValue * leverage;
 
+  // Fetch wallet balance
   useEffect(() => {
     if (!publicKey || !connection) return;
     connection.getBalance(publicKey).then((bal) => {
@@ -89,6 +90,7 @@ export default function App() {
     }).catch(() => setBalance(null));
   }, [publicKey, connection]);
 
+  // TradingView chart
   useEffect(() => {
     const container = chartRef.current;
     if (!container || activeTab !== 'TRADE') return;
@@ -125,6 +127,27 @@ export default function App() {
     return () => { container.innerHTML = ''; };
   }, [market, timeframe, activeTab]);
 
+  // Live PnL calculation based on current price vs entry price
+  useEffect(() => {
+    if (positions.length === 0) return;
+    setPositions(prev => prev.map(p => {
+      const currentPrice = TICKER[p.market].price;
+      const entryPrice = p.entryPrice;
+      const rawPnl = p.direction === 'LONG'
+        ? (currentPrice - entryPrice) / entryPrice
+        : (entryPrice - currentPrice) / entryPrice;
+      const pnl = rawPnl * p.sizeUsd * p.leverage;
+      const pnlPct = rawPnl * p.leverage * 100;
+      return { ...p, pnl, pnlPct };
+    }));
+  }, [market]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Computed totals
+  const totalPnl = positions.reduce((a, p) => a + (p.pnl || 0), 0);
+  const totalPnlPct = positions.length > 0
+    ? positions.reduce((a, p) => a + (p.pnlPct || 0), 0) / positions.length
+    : 0;
+
   async function handleOpenPosition() {
     if (!publicKey || !wallet) return;
 
@@ -141,7 +164,6 @@ export default function App() {
     setLoading(true);
     setTxLog('');
 
-    // Auto stop after 30 seconds if transaction hangs
     const timeout = setTimeout(() => {
       setLoading(false);
       setTxLog('Error: Transaction timed out. Please try again.');
@@ -168,6 +190,7 @@ export default function App() {
         tp: tpsl.tp, sl: tpsl.sl,
         timestamp: new Date().toLocaleTimeString(),
         pnl: 0,
+        pnlPct: 0,
       }]);
       setHistory(prev => [...prev, {
         id: Date.now(), market, direction,
@@ -403,13 +426,19 @@ export default function App() {
                   ? <span className="ps-empty">{publicKey ? 'No open positions' : 'Connect wallet to view positions'}</span>
                   : <div className="pos-table">
                       <div className="pos-head">
-                        <span>Market</span><span>Dir</span><span>Size</span><span>Entry</span><span>Lev</span><span>Privacy</span><span>Action</span>
+                        <span>Market</span><span>Dir</span><span>Size</span><span>PnL</span><span>Entry</span><span>Lev</span><span>Privacy</span><span>Action</span>
                       </div>
                       {positions.map((p) => (
                         <div key={p.id} className="pos-row">
                           <span className="accent">{p.market}</span>
                           <span className={p.direction === 'LONG' ? 'up' : 'dn'}>{p.direction}</span>
                           <span>{p.revealed ? `${p.sizeNative.toFixed(4)} ${TOKEN_SYMBOL[p.market]}` : '****'}</span>
+                          <span className={p.revealed ? ((p.pnl || 0) >= 0 ? 'up' : 'dn') : ''}>
+                            {p.revealed
+                              ? `${(p.pnl || 0) >= 0 ? '+' : ''}$${(p.pnl || 0).toFixed(2)} (${(p.pnlPct || 0) >= 0 ? '+' : ''}${(p.pnlPct || 0).toFixed(2)}%)`
+                              : '****'
+                            }
+                          </span>
                           <span>${p.entryPrice.toLocaleString()}</span>
                           <span>{p.leverage}x</span>
                           <span className="purple">{p.revealed ? 'REVEALED' : 'ENCRYPTED'}</span>
@@ -440,9 +469,17 @@ export default function App() {
               )}
             </div>
 
-            {/* METRICS */}
+            {/* METRICS with live PnL */}
             <div className="ps-metrics">
-              <div className="psm"><span className="psm-l">UNREAL. PNL</span><span className="psm-r up">$0.00</span></div>
+              <div className="psm">
+                <span className="psm-l">UNREAL. PNL</span>
+                <span className={`psm-r ${totalPnl >= 0 ? 'up' : 'dn'}`}>
+                  {totalPnl >= 0 ? '+' : ''}${totalPnl.toFixed(2)}
+                </span>
+                <span className={`psm-pct ${totalPnlPct >= 0 ? 'up' : 'dn'}`}>
+                  {totalPnlPct >= 0 ? '+' : ''}{totalPnlPct.toFixed(2)}%
+                </span>
+              </div>
               <div className="psm"><span className="psm-l">MARGIN</span><span className="psm-r purple">SEALED</span></div>
               <div className="psm"><span className="psm-l">BALANCE</span><span className="psm-r">{balance !== null ? `${balance.toFixed(3)} SOL` : '--'}</span></div>
               <div className="psm"><span className="psm-l">POSITIONS</span><span className="psm-r">{positions.length}</span></div>
@@ -527,8 +564,12 @@ export default function App() {
             </div>
             <div className="pf-card">
               <span className="pf-l">UNREALIZED PNL</span>
-              <span className="pf-v up">$0.00</span>
-              <span className="pf-sub">+0.00%</span>
+              <span className={`pf-v ${totalPnl >= 0 ? 'up' : 'dn'}`}>
+                {totalPnl >= 0 ? '+' : ''}${totalPnl.toFixed(2)}
+              </span>
+              <span className={`pf-sub ${totalPnlPct >= 0 ? 'up' : 'dn'}`}>
+                {totalPnlPct >= 0 ? '+' : ''}{totalPnlPct.toFixed(2)}%
+              </span>
             </div>
             <div className="pf-card">
               <span className="pf-l">OPEN POSITIONS</span>
@@ -547,13 +588,19 @@ export default function App() {
               ? <div className="tp-empty">No open positions. Go to Trade to open a position.</div>
               : <div className="tp-table">
                   <div className="tt-head">
-                    <span>Market</span><span>Direction</span><span>Size</span><span>Entry</span><span>Leverage</span><span>Privacy</span><span>Action</span>
+                    <span>Market</span><span>Direction</span><span>Size</span><span>PnL</span><span>Entry</span><span>Leverage</span><span>Privacy</span><span>Action</span>
                   </div>
                   {positions.map((p) => (
                     <div key={p.id} className="tt-row">
                       <span className="accent">{p.market}</span>
                       <span className={p.direction === 'LONG' ? 'up' : 'dn'}>{p.direction}</span>
                       <span>{p.revealed ? `${p.sizeNative.toFixed(4)} ${TOKEN_SYMBOL[p.market]}` : '****'}</span>
+                      <span className={p.revealed ? ((p.pnl || 0) >= 0 ? 'up' : 'dn') : ''}>
+                        {p.revealed
+                          ? `${(p.pnl || 0) >= 0 ? '+' : ''}$${(p.pnl || 0).toFixed(2)} (${(p.pnlPct || 0) >= 0 ? '+' : ''}${(p.pnlPct || 0).toFixed(2)}%)`
+                          : '****'
+                        }
+                      </span>
                       <span>${p.entryPrice.toLocaleString()}</span>
                       <span>{p.leverage}x</span>
                       <span className="purple">{p.revealed ? 'REVEALED' : 'ENCRYPTED'}</span>
