@@ -1,7 +1,13 @@
-import {
-  Transaction,
-  SystemProgram,
-} from "@solana/web3.js";
+import { Transaction, SystemProgram, PublicKey } from "@solana/web3.js";
+
+interface OpenPositionParams {
+  connection: any;
+  publicKey: any;
+  sendTransaction: any;
+  direction: number;
+  leverage: number;
+  commitmentHash: Uint8Array;
+}
 
 export async function openPosition({
   connection,
@@ -10,28 +16,47 @@ export async function openPosition({
   direction,
   leverage,
   commitmentHash,
-}: any) {
+}: OpenPositionParams) {
   const tx = new Transaction();
 
-  const instruction = SystemProgram.transfer({
-    fromPubkey: publicKey,
-    toPubkey: publicKey,
-    lamports: 0,
-  });
+  tx.add(
+    SystemProgram.transfer({
+      fromPubkey: publicKey,
+      toPubkey: publicKey,
+      lamports: 0,
+    })
+  );
 
-  tx.add(instruction);
+  // Get latest blockhash with longer validity
+  const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
+  tx.recentBlockhash = blockhash;
+  tx.feePayer = publicKey;
 
+  // Send transaction
   const signature = await sendTransaction(tx, connection);
-  await connection.confirmTransaction(signature);
+
+  // Confirm with longer timeout
+  await connection.confirmTransaction(
+    {
+      signature,
+      blockhash,
+      lastValidBlockHeight,
+    },
+    'confirmed'
+  );
 
   return signature;
 }
 
-export async function closePosition({ connection, wallet }: any) {
+export async function closePosition({
+  connection,
+  wallet,
+}: {
+  connection: any;
+  wallet: any;
+}) {
   const tx = new Transaction();
-
   const signature = await wallet.sendTransaction(tx, connection);
   await connection.confirmTransaction(signature);
-
   return signature;
 }

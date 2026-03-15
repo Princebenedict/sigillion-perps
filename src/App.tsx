@@ -145,7 +145,7 @@ export default function App() {
     const timeout = setTimeout(() => {
       setLoading(false);
       setTxLog('Error: Transaction timed out. Please try again.');
-    }, 30000);
+    }, 60000);
 
     try {
       const { commitmentHash } = await submitToArcium({ size: usdValue, direction, leverage });
