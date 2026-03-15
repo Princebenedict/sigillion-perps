@@ -702,4 +702,27 @@ body::before {
   letter-spacing: 0.06em;
 }
 
+/* ══ SHARE PNL BUTTON ══ */
+.share-pnl-btn {
+  background: linear-gradient(135deg, rgba(0,245,196,0.1), rgba(155,108,255,0.1));
+  border: 1px solid rgba(0,245,196,0.3);
+  color: var(--acc);
+  padding: 2px 8px;
+  border-radius: 2px;
+  cursor: pointer;
+  font-family: 'Space Mono', monospace;
+  font-size: 0.46rem;
+  letter-spacing: 0.06em;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.share-pnl-btn:hover {
+  background: rgba(0,245,196,0.15);
+  box-shadow: 0 0 8px rgba(0,245,196,0.2);
+}
+
+@media (max-width: 768px) {
+  .share-pnl-btn { font-size: 0.58rem; padding: 5px 12px; }
+}
 

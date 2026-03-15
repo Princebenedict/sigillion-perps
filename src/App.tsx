@@ -50,6 +50,154 @@ function genBook(base: number) {
   return { asks, bids };
 }
 
+// ══ PNL CARD GENERATOR ══
+function downloadPnlCard(p: any) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 800;
+  canvas.height = 450;
+  const ctx = canvas.getContext('2d')!;
+
+  const isProfit = (p.pnl || 0) >= 0;
+  const mainColor = isProfit ? '#00e676' : '#ff1650';
+  const mainColorAlpha = isProfit ? 'rgba(0,230,118,' : 'rgba(255,22,80,';
+
+  // Background
+  ctx.fillStyle = '#030710';
+  ctx.fillRect(0, 0, 800, 450);
+
+  // Grid pattern
+  ctx.strokeStyle = 'rgba(0,245,196,0.04)';
+  ctx.lineWidth = 1;
+  for (let x = 0; x < 800; x += 52) {
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, 450); ctx.stroke();
+  }
+  for (let y = 0; y < 450; y += 52) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(800, y); ctx.stroke();
+  }
+
+  // Top gradient bar
+  const topGrad = ctx.createLinearGradient(0, 0, 800, 0);
+  topGrad.addColorStop(0, 'transparent');
+  topGrad.addColorStop(0.5, mainColor);
+  topGrad.addColorStop(1, 'transparent');
+  ctx.fillStyle = topGrad;
+  ctx.fillRect(0, 0, 800, 3);
+
+  // Bottom gradient bar
+  ctx.fillStyle = topGrad;
+  ctx.fillRect(0, 447, 800, 3);
+
+  // Glow circle watermark background
+  ctx.beginPath();
+  ctx.arc(660, 225, 160, 0, Math.PI * 2);
+  const glowGrad = ctx.createRadialGradient(660, 225, 0, 660, 225, 160);
+  glowGrad.addColorStop(0, mainColorAlpha + '0.08)');
+  glowGrad.addColorStop(1, 'transparent');
+  ctx.fillStyle = glowGrad;
+  ctx.fill();
+
+  // S watermark
+  ctx.fillStyle = mainColorAlpha + '0.12)';
+  ctx.font = 'bold 180px monospace';
+  ctx.fillText('S', 590, 310);
+
+  // Brand name
+  ctx.fillStyle = '#00f5c4';
+  ctx.font = 'bold 30px monospace';
+  ctx.fillText('SIGILLION', 40, 58);
+
+  // Brand tag
+  ctx.fillStyle = '#2a4560';
+  ctx.font = '13px monospace';
+  ctx.fillText('PRIVATE PERPS · POWERED BY ARCIUM MXE', 40, 80);
+
+  // Top divider
+  ctx.strokeStyle = '#0c1e35';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(40, 100); ctx.lineTo(760, 100); ctx.stroke();
+
+  // Market name
+  ctx.fillStyle = '#c2dff5';
+  ctx.font = 'bold 22px monospace';
+  ctx.fillText(p.market, 40, 135);
+
+  // Direction badge
+  const dirColor = p.direction === 'LONG' ? '#00e676' : '#ff1650';
+  const dirBg = p.direction === 'LONG' ? 'rgba(0,230,118,0.12)' : 'rgba(255,22,80,0.12)';
+  ctx.fillStyle = dirBg;
+  ctx.beginPath();
+  ctx.roundRect(160, 116, 80, 26, 4);
+  ctx.fill();
+  ctx.fillStyle = dirColor;
+  ctx.font = 'bold 14px monospace';
+  ctx.fillText(p.direction, 172, 133);
+
+  // Leverage badge
+  ctx.fillStyle = 'rgba(155,108,255,0.12)';
+  ctx.beginPath();
+  ctx.roundRect(252, 116, 60, 26, 4);
+  ctx.fill();
+  ctx.fillStyle = '#9b6cff';
+  ctx.font = 'bold 14px monospace';
+  ctx.fillText(`${p.leverage}x`, 264, 133);
+
+  // PnL main value
+  ctx.fillStyle = mainColor;
+  ctx.font = 'bold 80px monospace';
+  const pnlText = `${isProfit ? '+' : ''}$${(p.pnl || 0).toFixed(2)}`;
+  ctx.fillText(pnlText, 40, 240);
+
+  // PnL percentage
+  ctx.fillStyle = mainColor;
+  ctx.font = 'bold 36px monospace';
+  const pctText = `${(p.pnlPct || 0) >= 0 ? '+' : ''}${(p.pnlPct || 0).toFixed(2)}%`;
+  ctx.fillText(pctText, 40, 290);
+
+  // ROI label
+  ctx.fillStyle = '#2a4560';
+  ctx.font = '13px monospace';
+  ctx.fillText('UNREALIZED PNL', 40, 315);
+
+  // Details divider
+  ctx.strokeStyle = '#0c1e35';
+  ctx.beginPath(); ctx.moveTo(40, 335); ctx.lineTo(760, 335); ctx.stroke();
+
+  // Details row
+  ctx.fillStyle = '#6a9bbf';
+  ctx.font = '13px monospace';
+  ctx.fillText('ENTRY PRICE', 40, 360);
+  ctx.fillText('SIZE', 240, 360);
+  ctx.fillText('NOTIONAL', 440, 360);
+  ctx.fillText('TIME', 620, 360);
+
+  ctx.fillStyle = '#c2dff5';
+  ctx.font = 'bold 14px monospace';
+  ctx.fillText(`$${p.entryPrice.toLocaleString()}`, 40, 382);
+  ctx.fillText(`${p.sizeNative.toFixed(4)} ${TOKEN_SYMBOL[p.market]}`, 240, 382);
+  ctx.fillText(`$${(p.notional || 0).toFixed(2)}`, 440, 382);
+  ctx.fillText(p.timestamp || '--', 620, 382);
+
+  // Bottom divider
+  ctx.strokeStyle = '#0c1e35';
+  ctx.beginPath(); ctx.moveTo(40, 400); ctx.lineTo(760, 400); ctx.stroke();
+
+  // Footer left
+  ctx.fillStyle = '#2a4560';
+  ctx.font = '12px monospace';
+  ctx.fillText('sigillion-perps.vercel.app', 40, 428);
+
+  // Footer right
+  ctx.fillStyle = '#9b6cff';
+  ctx.font = '12px monospace';
+  ctx.fillText('Trade private. Stay sovereign.', 490, 428);
+
+  // Download
+  const link = document.createElement('a');
+  link.download = `sigillion-pnl-${p.market}-${p.direction}-${Date.now()}.png`;
+  link.href = canvas.toDataURL('image/png');
+  link.click();
+}
+
 type Tab = 'TRADE' | 'PORTFOLIO' | 'HISTORY' | 'MARKETS';
 
 export default function App() {
@@ -127,7 +275,7 @@ export default function App() {
     return () => { container.innerHTML = ''; };
   }, [market, timeframe, activeTab]);
 
-  // Live PnL calculation based on current price vs entry price
+  // Live PnL calculation
   useEffect(() => {
     if (positions.length === 0) return;
     setPositions(prev => prev.map(p => {
@@ -445,6 +593,11 @@ export default function App() {
                           <button className="reveal-btn" onClick={() => setPositions(prev => prev.map(x => x.id === p.id ? {...x, revealed: !x.revealed} : x))}>
                             {p.revealed ? 'HIDE' : 'REVEAL'}
                           </button>
+                          {p.revealed && (
+                            <button className="share-pnl-btn" onClick={() => downloadPnlCard(p)}>
+                              SHARE
+                            </button>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -607,6 +760,11 @@ export default function App() {
                       <button className="reveal-btn" onClick={() => setPositions(prev => prev.map(x => x.id === p.id ? {...x, revealed: !x.revealed} : x))}>
                         {p.revealed ? 'HIDE' : 'REVEAL'}
                       </button>
+                      {p.revealed && (
+                        <button className="share-pnl-btn" onClick={() => downloadPnlCard(p)}>
+                          SHARE PNL
+                        </button>
+                      )}
                     </div>
                   ))}
                 </div>
