@@ -137,7 +137,7 @@ export default function App() {
     const interval = setInterval(() => {
       setPrices(prev => {
         const updated = { ...prev };
-        Object.keys(updated).forEach((m: MarketKey) => {
+          (Object.keys(updated) as MarketKey[]).forEach((m) => {
           const changePct = (Math.random() * 1.2 - 0.6);
           const newPrice = Number((updated[m].price * (1 + changePct / 100)).toFixed(4));
           updated[m] = {
