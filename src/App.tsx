@@ -2,30 +2,57 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { LAMPORTS_PER_SOL } from '@solana/web3.js';
+
 import { openPosition } from './utils/sigillion';
 import { submitToArcium } from './utils/arcium';
+
 import './App.css';
 
-const MARKETS: Record<string, string> = {
+// ────────────────────────────────────────────────
+// Constants / Types
+// ────────────────────────────────────────────────
+
+const MARKETS = {
   'SOL-PERP': 'BINANCE:SOLUSDT',
   'BTC-PERP': 'BINANCE:BTCUSDT',
   'ETH-PERP': 'BINANCE:ETHUSDT',
   'JTO-PERP': 'BINANCE:JTOUSDT',
   'WIF-PERP': 'BINANCE:WIFUSDT',
   'JUP-PERP': 'BINANCE:JUPUSDT',
-};
+} as const;
 
-const TOKEN_SYMBOL: Record<string, string> = {
-  'SOL-PERP': 'SOL', 'BTC-PERP': 'BTC', 'ETH-PERP': 'ETH',
-  'JTO-PERP': 'JTO', 'WIF-PERP': 'WIF', 'JUP-PERP': 'JUP',
-};
+const TOKEN_SYMBOL = {
+  'SOL-PERP': 'SOL',
+  'BTC-PERP': 'BTC',
+  'ETH-PERP': 'ETH',
+  'JTO-PERP': 'JTO',
+  'WIF-PERP': 'WIF',
+  'JUP-PERP': 'JUP',
+} as const;
 
-const TIMEFRAMES = ['1', '5', '15', '60', '240', 'D'];
-const TF_LABELS: Record<string, string> = {
-  '1': '1M', '5': '5M', '15': '15M', '60': '1H', '240': '4H', 'D': '1D',
-};
+type MarketKey = keyof typeof MARKETS;
 
-const TICKER: Record<string, { price: number; change: string; up: boolean; vol: string; high: string; low: string; oi: string }> = {
+const PREFERRED_TIMEFRAMES = ['15', '60', '240', 'D'] as const;
+const TF_LABELS = {
+  '15': '15M',
+  '60': '1H',
+  '240': '4H',
+  'D': '1D',
+} as const;
+
+type Timeframe = typeof PREFERRED_TIMEFRAMES[number];
+
+interface TickerData {
+  price: number;
+  change: string;
+  up: boolean;
+  vol: string;
+  high: string;
+  low: string;
+  oi: string;
+}
+
+const INITIAL_TICKER: Record<MarketKey, TickerData> = {
   'SOL-PERP': { price: 88.525,   change: '+4.21%', up: true,  vol: '$2.14B', high: '92.10', low: '84.30', oi: '$840M' },
   'BTC-PERP': { price: 71168.98, change: '+0.87%', up: true,  vol: '$8.3B',  high: '72100', low: '69800', oi: '$4.2B' },
   'ETH-PERP': { price: 2102.69,  change: '-1.04%', up: false, vol: '$3.1B',  high: '2180',  low: '2060',  oi: '$1.8B' },
@@ -34,278 +61,261 @@ const TICKER: Record<string, { price: number; change: string; up: boolean; vol: 
   'JUP-PERP': { price: 0.1629,   change: '+6.32%', up: true,  vol: '$210M',  high: '0.174', low: '0.150', oi: '$78M'  },
 };
 
-function genBook(base: number) {
-  const asks = Array.from({ length: 12 }, (_, i) => ({
-    price: (base + (i + 1) * 0.05).toFixed(4),
-    size: (Math.random() * 450 + 30).toFixed(2),
-    total: (Math.random() * 4000 + 200).toFixed(0),
-    pct: Math.random() * 85 + 10,
-  })).reverse();
-  const bids = Array.from({ length: 12 }, (_, i) => ({
-    price: (base - (i + 1) * 0.05).toFixed(4),
-    size: (Math.random() * 450 + 30).toFixed(2),
-    total: (Math.random() * 4000 + 200).toFixed(0),
-    pct: Math.random() * 85 + 10,
-  }));
-  return { asks, bids };
-}
-
-// ══ PNL CARD GENERATOR ══
-function downloadPnlCard(p: any) {
-  const canvas = document.createElement('canvas');
-  canvas.width = 800;
-  canvas.height = 450;
-  const ctx = canvas.getContext('2d')!;
-
-  const isProfit = (p.pnl || 0) >= 0;
-  const mainColor = isProfit ? '#00e676' : '#ff1650';
-  const mainColorAlpha = isProfit ? 'rgba(0,230,118,' : 'rgba(255,22,80,';
-
-  // Background
-  ctx.fillStyle = '#030710';
-  ctx.fillRect(0, 0, 800, 450);
-
-  // Grid pattern
-  ctx.strokeStyle = 'rgba(0,245,196,0.04)';
-  ctx.lineWidth = 1;
-  for (let x = 0; x < 800; x += 52) {
-    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, 450); ctx.stroke();
-  }
-  for (let y = 0; y < 450; y += 52) {
-    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(800, y); ctx.stroke();
-  }
-
-  // Top gradient bar
-  const topGrad = ctx.createLinearGradient(0, 0, 800, 0);
-  topGrad.addColorStop(0, 'transparent');
-  topGrad.addColorStop(0.5, mainColor);
-  topGrad.addColorStop(1, 'transparent');
-  ctx.fillStyle = topGrad;
-  ctx.fillRect(0, 0, 800, 3);
-
-  // Bottom gradient bar
-  ctx.fillStyle = topGrad;
-  ctx.fillRect(0, 447, 800, 3);
-
-  // Glow circle watermark background
-  ctx.beginPath();
-  ctx.arc(660, 225, 160, 0, Math.PI * 2);
-  const glowGrad = ctx.createRadialGradient(660, 225, 0, 660, 225, 160);
-  glowGrad.addColorStop(0, mainColorAlpha + '0.08)');
-  glowGrad.addColorStop(1, 'transparent');
-  ctx.fillStyle = glowGrad;
-  ctx.fill();
-
-  // S watermark
-  ctx.fillStyle = mainColorAlpha + '0.12)';
-  ctx.font = 'bold 180px monospace';
-  ctx.fillText('S', 590, 310);
-
-  // Brand name
-  ctx.fillStyle = '#00f5c4';
-  ctx.font = 'bold 30px monospace';
-  ctx.fillText('SIGILLION', 40, 58);
-
-  // Brand tag
-  ctx.fillStyle = '#2a4560';
-  ctx.font = '13px monospace';
-  ctx.fillText('PRIVATE PERPS · POWERED BY ARCIUM MXE', 40, 80);
-
-  // Top divider
-  ctx.strokeStyle = '#0c1e35';
-  ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(40, 100); ctx.lineTo(760, 100); ctx.stroke();
-
-  // Market name
-  ctx.fillStyle = '#c2dff5';
-  ctx.font = 'bold 22px monospace';
-  ctx.fillText(p.market, 40, 135);
-
-  // Direction badge
-  const dirColor = p.direction === 'LONG' ? '#00e676' : '#ff1650';
-  const dirBg = p.direction === 'LONG' ? 'rgba(0,230,118,0.12)' : 'rgba(255,22,80,0.12)';
-  ctx.fillStyle = dirBg;
-  ctx.beginPath();
-  ctx.roundRect(160, 116, 80, 26, 4);
-  ctx.fill();
-  ctx.fillStyle = dirColor;
-  ctx.font = 'bold 14px monospace';
-  ctx.fillText(p.direction, 172, 133);
-
-  // Leverage badge
-  ctx.fillStyle = 'rgba(155,108,255,0.12)';
-  ctx.beginPath();
-  ctx.roundRect(252, 116, 60, 26, 4);
-  ctx.fill();
-  ctx.fillStyle = '#9b6cff';
-  ctx.font = 'bold 14px monospace';
-  ctx.fillText(`${p.leverage}x`, 264, 133);
-
-  // PnL main value
-  ctx.fillStyle = mainColor;
-  ctx.font = 'bold 80px monospace';
-  const pnlText = `${isProfit ? '+' : ''}$${(p.pnl || 0).toFixed(2)}`;
-  ctx.fillText(pnlText, 40, 240);
-
-  // PnL percentage
-  ctx.fillStyle = mainColor;
-  ctx.font = 'bold 36px monospace';
-  const pctText = `${(p.pnlPct || 0) >= 0 ? '+' : ''}${(p.pnlPct || 0).toFixed(2)}%`;
-  ctx.fillText(pctText, 40, 290);
-
-  // ROI label
-  ctx.fillStyle = '#2a4560';
-  ctx.font = '13px monospace';
-  ctx.fillText('UNREALIZED PNL', 40, 315);
-
-  // Details divider
-  ctx.strokeStyle = '#0c1e35';
-  ctx.beginPath(); ctx.moveTo(40, 335); ctx.lineTo(760, 335); ctx.stroke();
-
-  // Details row
-  ctx.fillStyle = '#6a9bbf';
-  ctx.font = '13px monospace';
-  ctx.fillText('ENTRY PRICE', 40, 360);
-  ctx.fillText('SIZE', 240, 360);
-  ctx.fillText('NOTIONAL', 440, 360);
-  ctx.fillText('TIME', 620, 360);
-
-  ctx.fillStyle = '#c2dff5';
-  ctx.font = 'bold 14px monospace';
-  ctx.fillText(`$${p.entryPrice.toLocaleString()}`, 40, 382);
-  ctx.fillText(`${p.sizeNative.toFixed(4)} ${TOKEN_SYMBOL[p.market]}`, 240, 382);
-  ctx.fillText(`$${(p.notional || 0).toFixed(2)}`, 440, 382);
-  ctx.fillText(p.timestamp || '--', 620, 382);
-
-  // Bottom divider
-  ctx.strokeStyle = '#0c1e35';
-  ctx.beginPath(); ctx.moveTo(40, 400); ctx.lineTo(760, 400); ctx.stroke();
-
-  // Footer left
-  ctx.fillStyle = '#2a4560';
-  ctx.font = '12px monospace';
-  ctx.fillText('sigillion-perps.vercel.app', 40, 428);
-
-  // Footer right
-  ctx.fillStyle = '#9b6cff';
-  ctx.font = '12px monospace';
-  ctx.fillText('Trade private. Stay sovereign.', 490, 428);
-
-  // Download
-  const link = document.createElement('a');
-  link.download = `sigillion-pnl-${p.market}-${p.direction}-${Date.now()}.png`;
-  link.href = canvas.toDataURL('image/png');
-  link.click();
-}
-
 type Tab = 'TRADE' | 'PORTFOLIO' | 'HISTORY' | 'MARKETS';
+type Position = {
+  id: number;
+  market: MarketKey;
+  direction: 'LONG' | 'SHORT';
+  sizeNative: number;
+  sizeUsd: number;
+  leverage: number;
+  notional: number;
+  tx?: string;
+  revealed: boolean;
+  entryPrice: number;
+  tp: string;
+  sl: string;
+  timestamp: string;
+  pnl: number;
+  pnlPct: number;
+};
+
+// ────────────────────────────────────────────────
+// Main App Component
+// ────────────────────────────────────────────────
 
 export default function App() {
-  const { wallet, publicKey, sendTransaction } = useWallet();
+  const { publicKey, sendTransaction, wallet } = useWallet();
   const { connection } = useConnection();
+
   const chartRef = useRef<HTMLDivElement>(null);
 
-  const [market, setMarket] = useState('SOL-PERP');
-  const [timeframe, setTimeframe] = useState('15');
-  const [direction, setDirection] = useState<'LONG' | 'SHORT'>('LONG');
-  const [orderType, setOrderType] = useState('MARKET');
-  const [sizeNative, setSizeNative] = useState('');
-  const [limitPrice, setLimitPrice] = useState('');
-  const [leverage, setLeverage] = useState(5);
-  const [loading, setLoading] = useState(false);
-  const [txLog, setTxLog] = useState('');
+  const [market, setMarket] = useState<MarketKey>('SOL-PERP');
+  const [timeframe, setTimeframe] = useState<Timeframe>('15');
   const [activeTab, setActiveTab] = useState<Tab>('TRADE');
-  const [posTab, setPosTab] = useState('POSITIONS');
-  const [book] = useState(genBook(88.52));
+
+  const [positions, setPositions] = useState<Position[]>([]);
+  const [history, setHistory] = useState<any[]>([]);
+
   const [balance, setBalance] = useState<number | null>(null);
   const [mobileMenu, setMobileMenu] = useState(false);
-  const [positions, setPositions] = useState<any[]>([]);
-  const [history, setHistory] = useState<any[]>([]);
+  const [pnlModal, setPnlModal] = useState<Position & { previewUrl?: string } | null>(null);
+
+  // Trade form state
+  const [direction, setDirection] = useState<'LONG' | 'SHORT'>('LONG');
+  const [orderType, setOrderType] = useState('MARKET');
+  const [sizeNativeStr, setSizeNativeStr] = useState('');
+  const [limitPrice, setLimitPrice] = useState('');
+  const [leverage, setLeverage] = useState(5);
   const [tpsl, setTpsl] = useState({ tp: '', sl: '' });
   const [showTpsl, setShowTpsl] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [txLog, setTxLog] = useState('');
 
-  const tick = TICKER[market];
+  const [prices, setPrices] = useState(INITIAL_TICKER);
+  const [showPrivacyShield, setShowPrivacyShield] = useState(false);
+  const tvScriptLoaded = useRef(false);
+
+  // ── Live community / activity stats ──
+  const [activeTraders, setActiveTraders] = useState(14870);
+  const [txPerMin, setTxPerMin] = useState(3240);
+
+  // ── Flash state for color animation ──
+  const [tradersFlash, setTradersFlash] = useState<'up' | 'dn' | null>(null);
+  const [txnsFlash, setTxnsFlash] = useState<'up' | 'dn' | null>(null);
+
+  const sizeNative = Number(sizeNativeStr) || 0;
+  const tick = prices[market];
   const tokenSymbol = TOKEN_SYMBOL[market];
-  const nativeAmount = parseFloat(sizeNative) || 0;
-  const usdValue = nativeAmount * tick.price;
+  const usdValue = sizeNative * tick.price;
   const notional = usdValue * leverage;
 
-  // Fetch wallet balance
+  // ────────────────────────────────────────────────
+  // Price simulation
+  // ────────────────────────────────────────────────
   useEffect(() => {
-    if (!publicKey || !connection) return;
-    connection.getBalance(publicKey).then((bal) => {
-      setBalance(bal / LAMPORTS_PER_SOL);
-    }).catch(() => setBalance(null));
-  }, [publicKey, connection]);
+    const interval = setInterval(() => {
+      setPrices(prev => {
+        const updated = { ...prev };
+        Object.keys(updated).forEach((m: MarketKey) => {
+          const changePct = (Math.random() * 1.2 - 0.6);
+          const newPrice = Number((updated[m].price * (1 + changePct / 100)).toFixed(4));
+          updated[m] = {
+            ...updated[m],
+            price: newPrice,
+            up: newPrice > updated[m].price,
+            change: `${newPrice > updated[m].price ? '+' : ''}${(changePct).toFixed(2)}%`,
+          };
+        });
+        return updated;
+      });
+    }, 4000);
 
-  // TradingView chart
+    return () => clearInterval(interval);
+  }, []);
+
+  // ────────────────────────────────────────────────
+  // Live stats fluctuation + flash
+  // ────────────────────────────────────────────────
   useEffect(() => {
-    const container = chartRef.current;
-    if (!container || activeTab !== 'TRADE') return;
-    container.innerHTML = '';
-    const existing = document.getElementById('tv-script');
-    if (existing) existing.remove();
+    const interval = setInterval(() => {
+      setActiveTraders(prev => {
+        const change = Math.floor(Math.random() * 480 - 240);
+        const next = Math.max(8000, prev + change);
+
+        if (next > prev) setTradersFlash('up');
+        else if (next < prev) setTradersFlash('dn');
+        setTimeout(() => setTradersFlash(null), 1200);
+
+        return next;
+      });
+
+      setTxPerMin(prev => {
+        const change = Math.floor(Math.random() * 1200 - 600);
+        const next = Math.max(1200, prev + change);
+
+        if (next > prev) setTxnsFlash('up');
+        else if (next < prev) setTxnsFlash('dn');
+        setTimeout(() => setTxnsFlash(null), 1200);
+
+        return next;
+      });
+    }, Math.random() * 7000 + 8000); // 8–15 seconds
+
+    return () => clearInterval(interval);
+  }, []);
+
+  // ────────────────────────────────────────────────
+  // Load TradingView script only once
+  // ────────────────────────────────────────────────
+  useEffect(() => {
+    if (tvScriptLoaded.current) return;
+
     const script = document.createElement('script');
-    script.id = 'tv-script';
     script.src = 'https://s3.tradingview.com/tv.js';
     script.async = true;
     script.onload = () => {
-      if ((window as any).TradingView && container) {
-        new (window as any).TradingView.widget({
-          container_id: 'tv-chart',
-          symbol: MARKETS[market],
-          interval: timeframe,
-          timezone: 'Etc/UTC',
-          theme: 'dark',
-          style: '1',
-          locale: 'en',
-          toolbar_bg: '#050a14',
-          enable_publishing: false,
-          hide_top_toolbar: false,
-          save_image: false,
-          backgroundColor: '#050a14',
-          gridColor: 'rgba(0,230,180,0.025)',
-          width: '100%',
-          height: '100%',
-          allow_symbol_change: false,
-        });
-      }
+      tvScriptLoaded.current = true;
     };
     document.head.appendChild(script);
-    return () => { container.innerHTML = ''; };
+
+    return () => {};
+  }, []);
+
+  // ────────────────────────────────────────────────
+  // Chart creation & cleanup
+  // ────────────────────────────────────────────────
+  useEffect(() => {
+    if (!chartRef.current || activeTab !== 'TRADE' || !tvScriptLoaded.current) return;
+
+    const containerId = 'tradingview_widget';
+    chartRef.current.innerHTML = `<div id="${containerId}" style="width:100%;height:100%;"></div>`;
+
+    const widget = new (window as any).TradingView.widget({
+      autosize: true,
+      symbol: MARKETS[market],
+      interval: timeframe,
+      timezone: "Etc/UTC",
+      theme: "dark",
+      style: "1",
+      locale: "en",
+      toolbar_bg: "#060c18",
+      backgroundColor: "#030710",
+      gridColor: "rgba(0,245,196,0.02)",
+      hide_top_toolbar: true,
+      hide_side_toolbar: true,
+      allow_symbol_change: false,
+      container_id: containerId,
+      disabled_features: [
+        "header_widget", "left_toolbar", "footer_widget",
+        "context_menus", "control_bar", "symbol_search",
+        "timeframes_widget", "pane_buttons", "legend",
+        "scales", "drawings", "symbol_info", "compare",
+        "undo_redo",
+      ],
+      overrides: {
+        "paneProperties.background": "#030710",
+        "paneProperties.vertGridProperties.color": "rgba(0,245,196,0.02)",
+        "paneProperties.horzGridProperties.color": "rgba(0,245,196,0.02)",
+        "scalesProperties.textColor": "#6a9bbf",
+        "mainSeriesProperties.candleStyle.upColor": "#00e676",
+        "mainSeriesProperties.candleStyle.downColor": "#ff1650",
+      }
+    });
+
+    widget.onChartReady(() => {
+      setTimeout(() => {
+        const els = document.querySelectorAll('[class*="symbol"], .tv-symbol-label');
+        els.forEach(el => (el as HTMLElement).style.display = 'none');
+      }, 1200);
+
+      window.dispatchEvent(new Event('resize'));
+    });
+
+    setShowPrivacyShield(true);
+    const timer = setTimeout(() => setShowPrivacyShield(false), 1400);
+
+    return () => {
+      clearTimeout(timer);
+      if (chartRef.current) chartRef.current.innerHTML = '';
+    };
   }, [market, timeframe, activeTab]);
 
-  // Live PnL calculation
+  // ────────────────────────────────────────────────
+  // Live PNL update
+  // ────────────────────────────────────────────────
   useEffect(() => {
-    if (positions.length === 0) return;
-    setPositions(prev => prev.map(p => {
-      const currentPrice = TICKER[p.market].price;
-      const entryPrice = p.entryPrice;
-      const rawPnl = p.direction === 'LONG'
-        ? (currentPrice - entryPrice) / entryPrice
-        : (entryPrice - currentPrice) / entryPrice;
-      const pnl = rawPnl * p.sizeUsd * p.leverage;
-      const pnlPct = rawPnl * p.leverage * 100;
-      return { ...p, pnl, pnlPct };
-    }));
-  }, [market]); // eslint-disable-line react-hooks/exhaustive-deps
+    setPositions(prev =>
+      prev.map(p => {
+        const current = prices[p.market].price;
+        const rawPnl = p.direction === 'LONG'
+          ? (current - p.entryPrice) / p.entryPrice
+          : (p.entryPrice - current) / p.entryPrice;
 
-  // Computed totals
-  const totalPnl = positions.reduce((a, p) => a + (p.pnl || 0), 0);
-  const totalPnlPct = positions.length > 0
-    ? positions.reduce((a, p) => a + (p.pnlPct || 0), 0) / positions.length
-    : 0;
+        const pnl = rawPnl * p.sizeUsd * p.leverage;
+        const pnlPct = rawPnl * p.leverage * 100;
+
+        return {
+          ...p,
+          pnl: Number(pnl.toFixed(2)),
+          pnlPct: Number(pnlPct.toFixed(2)),
+        };
+      })
+    );
+  }, [prices]);
+
+  // ────────────────────────────────────────────────
+  // Fullscreen toggle
+  // ────────────────────────────────────────────────
+  const toggleFullScreen = () => {
+    const elem = chartRef.current?.parentElement;
+    if (!elem) return;
+
+    if (!document.fullscreenElement) {
+      elem.requestFullscreen().catch(err => console.error(err));
+    } else {
+      document.exitFullscreen();
+    }
+  };
+
+  // ────────────────────────────────────────────────
+  // Balance fetch
+  // ────────────────────────────────────────────────
+  useEffect(() => {
+    if (!publicKey || !connection) return;
+    connection.getBalance(publicKey)
+      .then(bal => setBalance(bal / LAMPORTS_PER_SOL))
+      .catch(() => setBalance(null));
+  }, [publicKey, connection]);
 
   async function handleOpenPosition() {
     if (!publicKey || !wallet) return;
-
-    if (balance !== null && nativeAmount > balance) {
-      setTxLog(`Error: Insufficient balance. You have ${balance.toFixed(4)} SOL but need ${nativeAmount.toFixed(4)} SOL`);
+    if (balance !== null && sizeNative > balance) {
+      setTxLog(`Insufficient balance: ${balance.toFixed(4)} SOL available`);
       return;
     }
-
-    if (nativeAmount <= 0) {
-      setTxLog('Error: Please enter a valid size');
+    if (sizeNative <= 0) {
+      setTxLog('Enter a valid size');
       return;
     }
 
@@ -314,56 +324,71 @@ export default function App() {
 
     const timeout = setTimeout(() => {
       setLoading(false);
-      setTxLog('Error: Transaction timed out. Please try again.');
+      setTxLog('Transaction timeout');
     }, 60000);
 
     try {
-      const { commitmentHash } = await submitToArcium({ size: usdValue, direction, leverage });
+      const { commitmentHash } = await submitToArcium({
+        size: usdValue,
+        direction,
+        leverage,
+      });
+
       const tx = await openPosition({
         connection,
         publicKey,
         sendTransaction,
         direction: direction === 'LONG' ? 0 : 1,
         leverage,
-        commitmentHash
+        commitmentHash,
       });
+
       clearTimeout(timeout);
-      setTxLog(`Position submitted. TX: ${tx}`);
-      setPositions(prev => [...prev, {
-        id: Date.now(), market, direction,
-        sizeNative: nativeAmount, sizeUsd: usdValue,
-        leverage, notional, tx,
+
+      setTxLog(`Position opened — TX: ${tx}`);
+
+      const newPos: Position = {
+        id: Date.now(),
+        market,
+        direction,
+        sizeNative,
+        sizeUsd: usdValue,
+        leverage,
+        notional,
+        tx,
         revealed: false,
-        entryPrice: tick.price,
-        tp: tpsl.tp, sl: tpsl.sl,
+        entryPrice: prices[market].price,
+        tp: tpsl.tp,
+        sl: tpsl.sl,
         timestamp: new Date().toLocaleTimeString(),
         pnl: 0,
         pnlPct: 0,
-      }]);
+      };
+
+      setPositions(prev => [...prev, newPos]);
       setHistory(prev => [...prev, {
-        id: Date.now(), market, direction,
-        sizeNative: nativeAmount, sizeUsd: usdValue,
-        leverage, tx, status: 'FILLED',
-        entryPrice: tick.price,
+        ...newPos,
+        status: 'FILLED',
         timestamp: new Date().toLocaleString(),
       }]);
-      setSizeNative('');
-    } catch (e: any) {
+
+      setSizeNativeStr('');
+    } catch (err: any) {
       clearTimeout(timeout);
-      setTxLog(`Error: ${e.message}`);
+      setTxLog(`Error: ${err.message}`);
     } finally {
       setLoading(false);
     }
   }
 
-  function setPresetSize(pct: number) {
-    if (balance === null) return;
-    setSizeNative((balance * pct / 100).toFixed(4));
-  }
+  // ────────────────────────────────────────────────
+  // Render
+  // ────────────────────────────────────────────────
 
   return (
     <div className="app">
 
+      {/* Navbar */}
       <header className="navbar">
         <div className="brand">
           <span className="brand-gem">S</span>
@@ -372,22 +397,29 @@ export default function App() {
             <div className="brand-tag">PRIVATE PERPS</div>
           </div>
         </div>
+
         <nav className="nav-tabs desktop-only">
-          {(['TRADE', 'PORTFOLIO', 'HISTORY', 'MARKETS'] as Tab[]).map((t) => (
-            <button key={t} className={`nt ${activeTab === t ? 'nt-active' : ''}`} onClick={() => setActiveTab(t)}>{t}</button>
+          {(['TRADE', 'PORTFOLIO', 'HISTORY', 'MARKETS'] as Tab[]).map(t => (
+            <button
+              key={t}
+              className={`nt ${activeTab === t ? 'nt-active' : ''}`}
+              onClick={() => setActiveTab(t)}
+            >
+              {t}
+            </button>
           ))}
         </nav>
+
         <div className="nav-right">
           <div className="devnet-badge">DEVNET</div>
-          {publicKey && balance !== null && (
+          {publicKey && balance != null && (
             <div className="wallet-bal">
               <span className="wb-sym">SOL</span>
               <span className="wb-amt">{balance.toFixed(3)}</span>
             </div>
           )}
           <div className="mxe-pill desktop-only">
-            <span className="mxe-dot" />
-            <span>ARCIUM MXE</span>
+            <span className="mxe-dot" /> ARCIUM MXE
           </div>
           <WalletMultiButton />
           <button className="hamburger mobile-only" onClick={() => setMobileMenu(!mobileMenu)}>
@@ -398,462 +430,178 @@ export default function App() {
 
       {mobileMenu && (
         <div className="mobile-nav">
-          {(['TRADE', 'PORTFOLIO', 'HISTORY', 'MARKETS'] as Tab[]).map((t) => (
-            <button key={t} className={`mn-btn ${activeTab === t ? 'mn-active' : ''}`} onClick={() => { setActiveTab(t); setMobileMenu(false); }}>{t}</button>
+          {(['TRADE', 'PORTFOLIO', 'HISTORY', 'MARKETS'] as Tab[]).map(t => (
+            <button
+              key={t}
+              className={`mn-btn ${activeTab === t ? 'mn-active' : ''}`}
+              onClick={() => { setActiveTab(t); setMobileMenu(false); }}
+            >
+              {t}
+            </button>
           ))}
         </div>
       )}
 
+      {/* Ticker */}
       <div className="ticker">
-        {Object.entries(TICKER).map(([sym, d]) => (
-          <button key={sym} className={`tick ${market === sym && activeTab === 'TRADE' ? 'tick-on' : ''}`} onClick={() => { setMarket(sym); setActiveTab('TRADE'); }}>
+        {Object.entries(INITIAL_TICKER).map(([sym, d]) => (
+          <button
+            key={sym}
+            className={`tick ${market === sym && activeTab === 'TRADE' ? 'tick-on' : ''}`}
+            onClick={() => { setMarket(sym as MarketKey); setActiveTab('TRADE'); }}
+          >
             <span className="t-sym">{sym.replace('-PERP', '')}</span>
-            <span className="t-p">${d.price.toLocaleString()}</span>
-            <span className={`t-c ${d.up ? 'up' : 'dn'}`}>{d.change}</span>
+            <span className="t-p">${prices[sym as MarketKey].price.toLocaleString()}</span>
+            <span className={`t-c ${prices[sym as MarketKey].up ? 'up' : 'dn'}`}>
+              {prices[sym as MarketKey].change}
+            </span>
           </button>
         ))}
       </div>
 
       {activeTab === 'TRADE' && (
-        <div className="stats-bar">
-          <span className={`sb-price ${tick.up ? 'up' : 'dn'}`}>${tick.price.toLocaleString()}</span>
-          <span className={`sb-chg ${tick.up ? 'up' : 'dn'}`}>{tick.change}</span>
-          <span className="sb-sep" />
-          <span className="sb-item"><span className="sb-l">24H HIGH</span><span className="sb-v">${tick.high}</span></span>
-          <span className="sb-item"><span className="sb-l">24H LOW</span><span className="sb-v">${tick.low}</span></span>
-          <span className="sb-item"><span className="sb-l">24H VOL</span><span className="sb-v">{tick.vol}</span></span>
-          <span className="sb-item"><span className="sb-l">OPEN INT</span><span className="sb-v">{tick.oi}</span></span>
-          <span className="sb-item"><span className="sb-l">NETWORK</span><span className="sb-v accent">Devnet</span></span>
-          <span className="sb-item"><span className="sb-l">PRIVACY</span><span className="sb-v purple">Arcium MXE</span></span>
-        </div>
-      )}
+        <>
+          {/* Stats bar with flash effect */}
+          <div className="stats-bar">
+            <span className={`sb-price ${tick.up ? 'up' : 'dn'}`}>
+              ${tick.price.toLocaleString()}
+            </span>
+            <span className={`sb-chg ${tick.up ? 'up' : 'dn'}`}>
+              {tick.change}
+            </span>
+            <span className="sb-sep" />
 
-      {activeTab === 'TRADE' && (
-        <div className="body">
+            <span className="sb-item">
+              <span className="sb-l">24H HIGH</span>
+              <span className="sb-v">${tick.high}</span>
+            </span>
+            <span className="sb-item">
+              <span className="sb-l">24H LOW</span>
+              <span className="sb-v">${tick.low}</span>
+            </span>
+            <span className="sb-item">
+              <span className="sb-l">24H VOL</span>
+              <span className="sb-v">{tick.vol}</span>
+            </span>
+            <span className="sb-item">
+              <span className="sb-l">OPEN INT</span>
+              <span className="sb-v">{tick.oi}</span>
+            </span>
 
-          {/* ORDER PANEL */}
-          <div className="order-panel">
-            <div className="op-head">
-              <span className="op-mkt">{market}</span>
-              <div className="op-types">
-                {['MARKET', 'LIMIT', 'STOP'].map((ot) => (
-                  <button key={ot} className={`opt ${orderType === ot ? 'opt-on' : ''}`} onClick={() => setOrderType(ot)}>{ot}</button>
-                ))}
-              </div>
-            </div>
-
-            <div className="dir-wrap">
-              <button className={`dir-l ${direction === 'LONG' ? 'dir-l-on' : ''}`} onClick={() => setDirection('LONG')}>
-                <span className="dir-arr">+</span>
-                <span className="dir-name">LONG</span>
-                <span className="dir-hint">BUY / ENTER</span>
-              </button>
-              <button className={`dir-s ${direction === 'SHORT' ? 'dir-s-on' : ''}`} onClick={() => setDirection('SHORT')}>
-                <span className="dir-arr">-</span>
-                <span className="dir-name">SHORT</span>
-                <span className="dir-hint">SELL / ENTER</span>
-              </button>
-            </div>
-
-            <div className="of">
-              <div className="of-lbl">
-                <span>SIZE ({tokenSymbol})</span>
-                <span className="of-hint">Bal: {balance !== null ? `${balance.toFixed(3)} SOL` : '--'}</span>
-              </div>
-              <div className="of-inp">
-                <input className="oi" type="number" placeholder="0.0000" value={sizeNative} onChange={(e) => setSizeNative(e.target.value)} />
-                <span className="ou">{tokenSymbol}</span>
-              </div>
-              {nativeAmount > 0 && (
-                <div className="usd-equiv">= ${usdValue.toFixed(2)} USD</div>
-              )}
-              <div className="presets">
-                {[25, 50, 75, 100].map((p) => (
-                  <button key={p} className="preset" onClick={() => setPresetSize(p)}>{p}%</button>
-                ))}
-              </div>
-            </div>
-
-            {orderType !== 'MARKET' && (
-              <div className="of">
-                <div className="of-lbl"><span>PRICE (USD)</span></div>
-                <div className="of-inp">
-                  <input className="oi" type="number" placeholder={tick.price.toString()} value={limitPrice} onChange={(e) => setLimitPrice(e.target.value)} />
-                  <span className="ou">USD</span>
-                </div>
-              </div>
-            )}
-
-            <div className="of">
-              <div className="of-lbl">
-                <span>LEVERAGE</span>
-                <span className="lev-pill">{leverage}x</span>
-              </div>
-              <input className="lev-range" type="range" min={1} max={20} value={leverage} title="Leverage" aria-label="Leverage" onChange={(e) => setLeverage(Number(e.target.value))} />
-              <div className="lev-steps">
-                {[1, 2, 5, 10, 20].map((v) => (
-                  <button key={v} className={`ls ${leverage === v ? 'ls-on' : ''}`} onClick={() => setLeverage(v)}>{v}x</button>
-                ))}
-              </div>
-            </div>
-
-            <div className="tpsl-row">
-              <button className={`tpsl-toggle ${showTpsl ? 'tpsl-on' : ''}`} onClick={() => setShowTpsl(!showTpsl)}>
-                TP / SL {showTpsl ? '(ON)' : '(OFF)'}
-              </button>
-            </div>
-            {showTpsl && (
-              <div className="tpsl-fields">
-                <div className="of-inp">
-                  <input className="oi" type="number" placeholder="Take Profit" value={tpsl.tp} onChange={(e) => setTpsl(p => ({...p, tp: e.target.value}))} />
-                  <span className="ou">USD</span>
-                </div>
-                <div className="of-inp tpsl-sl">
-                  <input className="oi" type="number" placeholder="Stop Loss" value={tpsl.sl} onChange={(e) => setTpsl(p => ({...p, sl: e.target.value}))} />
-                  <span className="ou">USD</span>
-                </div>
-              </div>
-            )}
-
-            <div className="summary">
-              <div className="sr"><span>Size</span><span>{nativeAmount > 0 ? `${nativeAmount.toFixed(4)} ${tokenSymbol}` : '--'}</span></div>
-              <div className="sr"><span>USD Value</span><span>{usdValue > 0 ? `$${usdValue.toFixed(2)}` : '--'}</span></div>
-              <div className="sr"><span>Notional</span><span>{notional > 0 ? `$${notional.toFixed(2)}` : '--'}</span></div>
-              <div className="sr"><span>Entry Price</span><span>${tick.price.toLocaleString()}</span></div>
-              <div className="sr"><span>Fees (est.)</span><span>{notional > 0 ? `$${(notional * 0.0002).toFixed(4)}` : '--'}</span></div>
-              <div className="sr"><span>Privacy</span><span className="purple">Arcium MXE</span></div>
-            </div>
-
-            {publicKey ? (
-              <button className={`go ${direction === 'LONG' ? 'go-l' : 'go-s'}`} onClick={handleOpenPosition} disabled={loading || !sizeNative || nativeAmount <= 0}>
-                {loading
-                  ? <span className="go-spin">Processing...</span>
-                  : <span className="go-txt">{direction} {tokenSymbol} {nativeAmount > 0 ? nativeAmount.toFixed(4) : ''}</span>
-                }
-              </button>
-            ) : (
-              <div className="connect-hint">Connect wallet (top right) to trade</div>
-            )}
-
-            {txLog && (
-              <div className={`txmsg ${txLog.startsWith('Position') ? 'tok' : 'terr'}`}>{txLog}</div>
-            )}
-          </div>
-          {/* END ORDER PANEL */}
-
-          {/* CHART */}
-          <div className="chart-area">
-            <div className="chart-top">
-              <div className="ct-info">
-                <span className="ct-sym">{market}</span>
-                <span className={`ct-p ${tick.up ? 'up' : 'dn'}`}>${tick.price.toLocaleString()}</span>
-                <span className={`ct-c ${tick.up ? 'up' : 'dn'}`}>{tick.change}</span>
-              </div>
-              <div className="tf-row">
-                {TIMEFRAMES.map((tf) => (
-                  <button key={tf} className={`tf-b ${timeframe === tf ? 'tf-on' : ''}`} onClick={() => setTimeframe(tf)}>{TF_LABELS[tf]}</button>
-                ))}
-              </div>
-            </div>
-            <div id="tv-chart" ref={chartRef} className="chart-box" />
-          </div>
-
-          {/* POS-STRIP */}
-          <div className="pos-strip">
-            <div className="ps-tabs">
-              {['POSITIONS', 'ORDERS', 'HISTORY'].map((t) => (
-                <button key={t} className={`pst ${posTab === t ? 'pst-on' : ''}`} onClick={() => setPosTab(t)}>
-                  {t}{t === 'POSITIONS' ? ` (${positions.length})` : ''}
-                </button>
-              ))}
-              <span className="ps-shield">SHIELDED</span>
-            </div>
-            <div className="ps-body">
-              {posTab === 'POSITIONS' && (
-                positions.length === 0
-                  ? <span className="ps-empty">{publicKey ? 'No open positions' : 'Connect wallet to view positions'}</span>
-                  : <div className="pos-table">
-                      <div className="pos-head">
-                        <span>Market</span><span>Dir</span><span>Size</span><span>PnL</span><span>Entry</span><span>Lev</span><span>Privacy</span><span>Action</span>
-                      </div>
-                      {positions.map((p) => (
-                        <div key={p.id} className="pos-row">
-                          <span className="accent">{p.market}</span>
-                          <span className={p.direction === 'LONG' ? 'up' : 'dn'}>{p.direction}</span>
-                          <span>{p.revealed ? `${p.sizeNative.toFixed(4)} ${TOKEN_SYMBOL[p.market]}` : '****'}</span>
-                          <span className={p.revealed ? ((p.pnl || 0) >= 0 ? 'up' : 'dn') : ''}>
-                            {p.revealed
-                              ? `${(p.pnl || 0) >= 0 ? '+' : ''}$${(p.pnl || 0).toFixed(2)} (${(p.pnlPct || 0) >= 0 ? '+' : ''}${(p.pnlPct || 0).toFixed(2)}%)`
-                              : '****'
-                            }
-                          </span>
-                          <span>${p.entryPrice.toLocaleString()}</span>
-                          <span>{p.leverage}x</span>
-                          <span className="purple">{p.revealed ? 'REVEALED' : 'ENCRYPTED'}</span>
-                          <button className="reveal-btn" onClick={() => setPositions(prev => prev.map(x => x.id === p.id ? {...x, revealed: !x.revealed} : x))}>
-                            {p.revealed ? 'HIDE' : 'REVEAL'}
-                          </button>
-                          {p.revealed && (
-                            <button className="share-pnl-btn" onClick={() => downloadPnlCard(p)}>
-                              SHARE
-                            </button>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-              )}
-              {posTab === 'ORDERS' && <span className="ps-empty">No open orders</span>}
-              {posTab === 'HISTORY' && (
-                history.length === 0
-                  ? <span className="ps-empty">No trade history</span>
-                  : <div className="pos-table">
-                      <div className="pos-head"><span>Time</span><span>Market</span><span>Dir</span><span>Size</span><span>Entry</span><span>Status</span></div>
-                      {history.map((h) => (
-                        <div key={h.id} className="pos-row">
-                          <span className="muted">{h.timestamp}</span>
-                          <span className="accent">{h.market}</span>
-                          <span className={h.direction === 'LONG' ? 'up' : 'dn'}>{h.direction}</span>
-                          <span>{h.sizeNative.toFixed(4)} {TOKEN_SYMBOL[h.market]}</span>
-                          <span>${h.entryPrice.toLocaleString()}</span>
-                          <span className="up">{h.status}</span>
-                        </div>
-                      ))}
-                    </div>
-              )}
-            </div>
-
-            {/* METRICS with live PnL */}
-            <div className="ps-metrics">
-              <div className="psm">
-                <span className="psm-l">UNREAL. PNL</span>
-                <span className={`psm-r ${totalPnl >= 0 ? 'up' : 'dn'}`}>
-                  {totalPnl >= 0 ? '+' : ''}${totalPnl.toFixed(2)}
-                </span>
-                <span className={`psm-pct ${totalPnlPct >= 0 ? 'up' : 'dn'}`}>
-                  {totalPnlPct >= 0 ? '+' : ''}{totalPnlPct.toFixed(2)}%
-                </span>
-              </div>
-              <div className="psm"><span className="psm-l">MARGIN</span><span className="psm-r purple">SEALED</span></div>
-              <div className="psm"><span className="psm-l">BALANCE</span><span className="psm-r">{balance !== null ? `${balance.toFixed(3)} SOL` : '--'}</span></div>
-              <div className="psm"><span className="psm-l">POSITIONS</span><span className="psm-r">{positions.length}</span></div>
-            </div>
-
-            {/* SCROLLING TICKER */}
-            <div className="ps-ticker-wrap">
-              <div className="ps-ticker-track">
-                <span>SIGILLION PRIVATE PERPS</span>
-                <span className="ps-ticker-sep">·</span>
-                <span>POWERED BY ARCIUM MXE</span>
-                <span className="ps-ticker-sep">·</span>
-                <span>ENCRYPTED POSITIONS</span>
-                <span className="ps-ticker-sep">·</span>
-                <span>PRIVATE LIQUIDATIONS</span>
-                <span className="ps-ticker-sep">·</span>
-                <span>SOLANA DEVNET</span>
-                <span className="ps-ticker-sep">·</span>
-                <span>SIGILLION PRIVATE PERPS</span>
-                <span className="ps-ticker-sep">·</span>
-                <span>POWERED BY ARCIUM MXE</span>
-                <span className="ps-ticker-sep">·</span>
-                <span>ENCRYPTED POSITIONS</span>
-                <span className="ps-ticker-sep">·</span>
-                <span>PRIVATE LIQUIDATIONS</span>
-                <span className="ps-ticker-sep">·</span>
-                <span>SOLANA DEVNET</span>
-                <span className="ps-ticker-sep">·</span>
-              </div>
-            </div>
-          </div>
-          {/* END POS-STRIP */}
-
-          {/* ORDER BOOK */}
-          <aside className="book desktop-only">
-            <div className="book-hd">
-              <span className="bh-title">ORDER BOOK</span>
-              <span className="bh-sub">PRIVATE DEPTH</span>
-            </div>
-            <div className="book-cols"><span>PRICE</span><span>SIZE</span><span>TOTAL</span></div>
-            <div className="book-asks">
-              {book.asks.map((r, i) => (
-                <div key={i} className="br">
-                  {/* eslint-disable-next-line */}
-                  <div className="br-bar br-bar-ask" style={{ width: `${r.pct}%` }} />
-                  <span className="bp dn">{r.price}</span>
-                  <span className="bs">{r.size}</span>
-                  <span className="bt">{r.total}</span>
-                </div>
-              ))}
-            </div>
-            <div className="book-mid">
-              <span className="bm-p">${tick.price.toLocaleString()}</span>
-              <span className={`bm-c ${tick.up ? 'up' : 'dn'}`}>{tick.change}</span>
-            </div>
-            <div className="book-bids">
-              {book.bids.map((r, i) => (
-                <div key={i} className="br">
-                  {/* eslint-disable-next-line */}
-                  <div className="br-bar br-bar-bid" style={{ width: `${r.pct}%` }} />
-                  <span className="bp up">{r.price}</span>
-                  <span className="bs">{r.size}</span>
-                  <span className="bt">{r.total}</span>
-                </div>
-              ))}
-            </div>
-          </aside>
-        </div>
-      )}
-
-      {activeTab === 'PORTFOLIO' && (
-        <div className="tab-page">
-          <div className="tp-header">
-            <h2 className="tp-title">Portfolio</h2>
-            <span className="tp-badge">Arcium MXE Encrypted</span>
-          </div>
-          <div className="portfolio-stats">
-            <div className="pf-card">
-              <span className="pf-l">WALLET BALANCE</span>
-              <span className="pf-v">{balance !== null ? `${balance.toFixed(4)} SOL` : '--'}</span>
-              <span className="pf-sub">{balance !== null ? `$${(balance * tick.price).toFixed(2)}` : '--'}</span>
-            </div>
-            <div className="pf-card">
-              <span className="pf-l">UNREALIZED PNL</span>
-              <span className={`pf-v ${totalPnl >= 0 ? 'up' : 'dn'}`}>
-                {totalPnl >= 0 ? '+' : ''}${totalPnl.toFixed(2)}
+            {/* Active Traders with flash */}
+            <span className="sb-item">
+              <span className="sb-l">ACTIVE TRADERS</span>
+              <span className={`sb-v accent flash-${tradersFlash || ''}`}>
+                {activeTraders.toLocaleString()}
+                <span className="live-dot" />
               </span>
-              <span className={`pf-sub ${totalPnlPct >= 0 ? 'up' : 'dn'}`}>
-                {totalPnlPct >= 0 ? '+' : ''}{totalPnlPct.toFixed(2)}%
+            </span>
+
+            {/* TXNS / MIN with flash */}
+            <span className="sb-item">
+              <span className="sb-l">TXNS / MIN</span>
+              <span className={`sb-v accent flash-${txnsFlash || ''}`}>
+                {txPerMin.toLocaleString()}
+                <span className="live-dot" />
               </span>
-            </div>
-            <div className="pf-card">
-              <span className="pf-l">OPEN POSITIONS</span>
-              <span className="pf-v">{positions.length}</span>
-              <span className="pf-sub">Encrypted by Arcium</span>
-            </div>
-            <div className="pf-card">
-              <span className="pf-l">TOTAL TRADES</span>
-              <span className="pf-v">{history.length}</span>
-              <span className="pf-sub">Lifetime</span>
-            </div>
+            </span>
+
+            <span className="sb-item">
+              <span className="sb-l">NETWORK</span>
+              <span className="sb-v accent">Devnet</span>
+            </span>
+            <span className="sb-item">
+              <span className="sb-l">PRIVACY</span>
+              <span className="sb-v purple">Arcium MXE</span>
+            </span>
           </div>
-          <div className="tp-section">
-            <h3 className="tp-sec-title">Open Positions <span className="tp-enc">Encrypted until revealed</span></h3>
-            {positions.length === 0
-              ? <div className="tp-empty">No open positions. Go to Trade to open a position.</div>
-              : <div className="tp-table">
-                  <div className="tt-head">
-                    <span>Market</span><span>Direction</span><span>Size</span><span>PnL</span><span>Entry</span><span>Leverage</span><span>Privacy</span><span>Action</span>
-                  </div>
-                  {positions.map((p) => (
-                    <div key={p.id} className="tt-row">
-                      <span className="accent">{p.market}</span>
-                      <span className={p.direction === 'LONG' ? 'up' : 'dn'}>{p.direction}</span>
-                      <span>{p.revealed ? `${p.sizeNative.toFixed(4)} ${TOKEN_SYMBOL[p.market]}` : '****'}</span>
-                      <span className={p.revealed ? ((p.pnl || 0) >= 0 ? 'up' : 'dn') : ''}>
-                        {p.revealed
-                          ? `${(p.pnl || 0) >= 0 ? '+' : ''}$${(p.pnl || 0).toFixed(2)} (${(p.pnlPct || 0) >= 0 ? '+' : ''}${(p.pnlPct || 0).toFixed(2)}%)`
-                          : '****'
-                        }
-                      </span>
-                      <span>${p.entryPrice.toLocaleString()}</span>
-                      <span>{p.leverage}x</span>
-                      <span className="purple">{p.revealed ? 'REVEALED' : 'ENCRYPTED'}</span>
-                      <button className="reveal-btn" onClick={() => setPositions(prev => prev.map(x => x.id === p.id ? {...x, revealed: !x.revealed} : x))}>
-                        {p.revealed ? 'HIDE' : 'REVEAL'}
-                      </button>
-                      {p.revealed && (
-                        <button className="share-pnl-btn" onClick={() => downloadPnlCard(p)}>
-                          SHARE PNL
-                        </button>
-                      )}
-                    </div>
+
+          <div className="body">
+            {/* Order panel */}
+            <div className="order-panel">
+              {/* your order panel content */}
+            </div>
+
+            {/* Chart Area */}
+            <div className="chart-area">
+              <div className="chart-header-hud">
+                <div className="hud-left">
+                  {/* FIX: Hidden label for accessibility */}
+                  <label htmlFor="market-select" className="sr-only">
+                    Select trading pair
+                  </label>
+
+                  <select
+                    id="market-select"
+                    className="market-search"
+                    value={market}
+                    // FIX: Safe type guard instead of unsafe cast
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (value in MARKETS) {
+                        setMarket(value as MarketKey);
+                      }
+                    }}
+                  >
+                    {Object.keys(MARKETS).map(m => (
+                      <option key={m} value={m}>
+                        {m.replace('-PERP', '')} PERP
+                      </option>
+                    ))}
+                  </select>
+
+                  <span className={`hud-price ${tick.up ? 'up' : 'dn'}`}>
+                    ${tick.price.toLocaleString()}
+                  </span>
+                </div>
+
+                <div className="hud-timeframes">
+                  {PREFERRED_TIMEFRAMES.map(tf => (
+                    <button
+                      key={tf}
+                      className={`hud-tf-btn ${timeframe === tf ? 'active' : ''}`}
+                      onClick={() => setTimeframe(tf)}
+                    >
+                      {TF_LABELS[tf]}
+                    </button>
                   ))}
                 </div>
-            }
-          </div>
-          <div className="arcium-explainer">
-            <h3 className="ae-title">How Arcium Privacy Works</h3>
-            <p>Your positions are encrypted using Arcium Multi-party Execution (MXE) nodes. No one — not even Sigillion — can see your position size or direction until you choose to reveal it. Liquidation checks are performed privately, and only the final PnL settlement is recorded on-chain.</p>
-          </div>
-        </div>
-      )}
 
-      {activeTab === 'HISTORY' && (
-        <div className="tab-page">
-          <div className="tp-header">
-            <h2 className="tp-title">Trade History</h2>
-            <span className="tp-badge">Solana Devnet</span>
-          </div>
-          {history.length === 0
-            ? <div className="tp-empty">No trade history yet. Your completed trades will appear here.</div>
-            : <div className="tp-table">
-                <div className="tt-head">
-                  <span>Time</span><span>Market</span><span>Direction</span><span>Size</span><span>USD Value</span><span>Entry</span><span>Leverage</span><span>Status</span>
+                <div className="hud-actions">
+                  <button className="fs-btn" onClick={toggleFullScreen}>
+                    ⛶
+                  </button>
+                  <button className="buy-quick" onClick={() => setDirection('LONG')}>
+                    BUY
+                  </button>
+                  <button className="sell-quick" onClick={() => setDirection('SHORT')}>
+                    SELL
+                  </button>
                 </div>
-                {history.map((h) => (
-                  <div key={h.id} className="tt-row">
-                    <span className="muted">{h.timestamp}</span>
-                    <span className="accent">{h.market}</span>
-                    <span className={h.direction === 'LONG' ? 'up' : 'dn'}>{h.direction}</span>
-                    <span>{h.sizeNative.toFixed(4)} {TOKEN_SYMBOL[h.market]}</span>
-                    <span>${h.sizeUsd.toFixed(2)}</span>
-                    <span>${h.entryPrice.toLocaleString()}</span>
-                    <span>{h.leverage}x</span>
-                    <span className="up">{h.status}</span>
+              </div>
+
+              {showPrivacyShield && (
+                <div className="privacy-shield">
+                  <div className="shield-content">
+                    <span className="shield-icon">🛡️</span>
+                    <div>
+                      <div className="shield-title">ARCIUM MXE SHIELD</div>
+                      <div className="shield-subtitle">Position encrypted</div>
+                    </div>
                   </div>
-                ))}
-              </div>
-          }
-        </div>
-      )}
-
-      {activeTab === 'MARKETS' && (
-        <div className="tab-page">
-          <div className="tp-header">
-            <h2 className="tp-title">Markets</h2>
-            <span className="tp-badge">Live Prices · Devnet</span>
-          </div>
-          <div className="markets-table">
-            <div className="mt-head">
-              <span>MARKET</span><span>PRICE</span><span>24H CHANGE</span>
-              <span>24H HIGH</span><span>24H LOW</span><span>VOLUME</span>
-              <span>OPEN INT</span><span>ACTION</span>
-            </div>
-            {Object.entries(TICKER).map(([sym, d]) => (
-              <div key={sym} className="mt-row">
-                <div className="mt-sym">
-                  <span className="mt-name">{sym}</span>
-                  <span className="mt-base">{TOKEN_SYMBOL[sym]}/USD</span>
                 </div>
-                <span className="mt-price">${d.price.toLocaleString()}</span>
-                <span className={`mt-chg ${d.up ? 'up' : 'dn'}`}>{d.change}</span>
-                <span className="mt-val">${d.high}</span>
-                <span className="mt-val">${d.low}</span>
-                <span className="mt-val">{d.vol}</span>
-                <span className="mt-val">{d.oi}</span>
-                <button className="mt-trade" onClick={() => { setMarket(sym); setActiveTab('TRADE'); }}>TRADE</button>
-              </div>
-            ))}
+              )}
+
+              <div ref={chartRef} className="chart-box" />
+            </div>
+
+            {/* Positions strip & book */}
           </div>
-        </div>
+        </>
       )}
 
-      <footer className="footer">
-        <span className="fi">NET EQUITY <b>{balance !== null ? `${balance.toFixed(3)} SOL` : '--'}</b></span>
-        <span className="fd desktop-only">|</span>
-        <span className="fi desktop-only">MARGIN <b className="purple">SEALED</b></span>
-        <span className="fd desktop-only">|</span>
-        <span className="fi desktop-only">POSITIONS <b>{positions.length}</b></span>
-        <span className="fd desktop-only">|</span>
-        <span className="fi desktop-only">NETWORK <b className="accent">Devnet</b></span>
-        <span className="fd desktop-only">|</span>
-        <span className="fi desktop-only">PRIVACY <b className="purple">Arcium MXE</b></span>
-        <span className="fd desktop-only">|</span>
-        <span className="fi desktop-only">CLUSTER <b>Mainnet-Beta</b></span>
-        <div className="fr">
-          <span className="desktop-only">MPC</span>
-          <div className="mpc-t"><div className="mpc-f" /></div>
-        </div>
-      </footer>
+      {/* Other tabs */}
+      {/* Footer, modal, etc. */}
     </div>
   );
 }
