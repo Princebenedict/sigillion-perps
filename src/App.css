@@ -193,24 +193,24 @@ body::before {
 @keyframes livePulse { 0%,100%{opacity:0.5;transform:scale(0.85)} 50%{opacity:1;transform:scale(1.4)} }
 
 /* ════════════════════════════════════════════════
-   Body row  (chart left, order panel right)
+   Body row
 ════════════════════════════════════════════════ */
 .body {
   display: flex;
   flex: 1 1 0;
-  min-height: 0;   /* CRITICAL */
+  min-height: 0;
   overflow: hidden;
 }
 
 /* ════════════════════════════════════════════════
-   Chart Area  — fills remaining width
+   Chart Area
 ════════════════════════════════════════════════ */
 .chart-area {
   flex: 1 1 auto;
-  min-width: 0;    /* CRITICAL */
+  min-width: 0;
   display: flex; flex-direction: column;
   overflow: hidden; background: var(--bg); position: relative;
-  order: 1;        /* chart on the LEFT */
+  order: 1;
 }
 
 /* Chart HUD */
@@ -237,6 +237,7 @@ body::before {
 .hud-timeframes {
   display:flex; gap:2px; background:rgba(0,0,0,0.35);
   padding:3px; border-radius:5px; border:1px solid var(--b1); flex-shrink:0;
+  align-items: center;
 }
 .hud-tf-btn {
   padding:3px 11px; border-radius:4px; font-size:0.58rem; font-weight:700;
@@ -245,6 +246,21 @@ body::before {
 }
 .hud-tf-btn:hover { color:var(--txt2); }
 .hud-tf-btn.active { background:var(--acc); color:#000; box-shadow:0 0 10px rgba(0,245,196,0.35); }
+
+/* Chart type toggle */
+.chart-type-divider {
+  width: 1px; height: 16px; background: var(--b2); margin: 0 2px; flex-shrink: 0;
+}
+.chart-type-btn {
+  font-size: 0.72rem !important;
+  padding: 3px 8px !important;
+  letter-spacing: 0 !important;
+}
+.chart-type-btn.active {
+  background: rgba(155,108,255,0.2) !important;
+  color: var(--purple) !important;
+  box-shadow: 0 0 8px rgba(155,108,255,0.25) !important;
+}
 
 .hud-actions { display:flex; gap:5px; margin-left:auto; align-items:center; flex-shrink:0; }
 
@@ -259,7 +275,7 @@ body::before {
 
 /* Chart canvas box */
 .chart-box {
-  flex: 1 1 auto; min-height: 0; /* CRITICAL */
+  flex: 1 1 auto; min-height: 0;
   width: 100%; position: relative; overflow: hidden; background: var(--bg);
 }
 .chart-box canvas {
@@ -289,7 +305,7 @@ body::before {
 }
 
 /* ════════════════════════════════════════════════
-   Positions strip (below chart)
+   Positions strip
 ════════════════════════════════════════════════ */
 .pos-strip {
   flex-shrink:0; max-height:var(--pos-h); border-top:1px solid var(--b1);
@@ -305,11 +321,143 @@ body::before {
 .ps-tab:hover { color:var(--txt); }
 .ps-tab-on    { color:var(--acc); border-bottom-color:var(--acc); }
 .ps-count     { font-size:0.44rem; background:var(--acc); color:#000; padding:1px 5px; border-radius:8px; margin-left:4px; font-weight:700; }
+.ps-enc-count { background: rgba(155,108,255,0.3); color: var(--purple); margin-left:2px; }
 
 .ps-body { flex:1; overflow-y:auto; scrollbar-width:none; -ms-overflow-style:none; }
 .ps-body::-webkit-scrollbar { display:none; width:0; height:0; }
 
-/* Compact position cards in strip */
+/* ════════════════════════════════════════════════
+   Arcium — Encrypted Position Cards
+════════════════════════════════════════════════ */
+
+/* Empty state */
+.pos-empty-arcium {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 20px; color: var(--muted); font-size: 0.56rem; letter-spacing: 0.06em;
+}
+.pea-icon { font-size: 1.8rem; }
+.pea-sub  { font-size: 0.48rem; color: var(--muted); opacity: 0.7; text-align: center; }
+
+/* Encrypted card */
+.pos-card-encrypted {
+  background: linear-gradient(135deg, rgba(155,108,255,0.04), rgba(0,87,255,0.04)) !important;
+  border-bottom: 1px solid rgba(155,108,255,0.15) !important;
+  animation: encryptPulse 3s ease-in-out infinite;
+}
+@keyframes encryptPulse {
+  0%,100% { box-shadow: none; }
+  50%     { box-shadow: inset 0 0 20px rgba(155,108,255,0.06); }
+}
+
+.pos-card-revealed {
+  border-left: 2px solid rgba(0,245,196,0.3) !important;
+}
+
+.pce-left {
+  display: flex; align-items: center; gap: 8px; flex-shrink: 0; min-width: 100px;
+}
+.pce-lock { font-size: 1.1rem; flex-shrink: 0; }
+.pce-info { display: flex; flex-direction: column; gap: 3px; }
+.pce-sym  { font-size: 0.62rem; font-weight: 700; color: var(--txt2); }
+.pce-meta { display: flex; gap: 4px; align-items: center; }
+
+.pce-center {
+  flex: 1; display: flex; flex-direction: column; gap: 4px; min-width: 0;
+}
+.pce-arcium-label {
+  font-family: 'Orbitron', monospace; font-size: 0.46rem; font-weight: 700;
+  color: var(--purple); letter-spacing: 0.12em;
+}
+.pce-jobid {
+  font-family: 'Space Mono', monospace; font-size: 0.44rem; color: var(--muted);
+  letter-spacing: 0.06em;
+}
+.pce-dots {
+  display: flex; align-items: center; gap: 4px;
+}
+.pce-dot {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: var(--purple); opacity: 0.5;
+  animation: dotBlink 1.4s ease-in-out infinite;
+}
+.pce-dot:nth-child(2) { animation-delay: 0.2s; }
+.pce-dot:nth-child(3) { animation-delay: 0.4s; }
+.pce-dot:nth-child(5) { animation-delay: 0.6s; }
+.pce-dot:nth-child(6) { animation-delay: 0.8s; }
+@keyframes dotBlink { 0%,100%{opacity:0.2} 50%{opacity:0.8} }
+
+.pce-redacted {
+  font-family: 'Space Mono', monospace; font-size: 0.42rem;
+  color: var(--muted); letter-spacing: 0.08em; opacity: 0.6;
+}
+
+.pce-right {
+  display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex-shrink: 0;
+}
+.pce-time { font-size: 0.42rem; color: var(--muted); }
+
+.pce-computing {
+  display: flex; align-items: center; gap: 6px;
+}
+.spinner-mxe {
+  width: 12px; height: 12px;
+  border: 2px solid rgba(155,108,255,0.2);
+  border-top-color: var(--purple);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  display: inline-block; flex-shrink: 0;
+}
+.pce-computing-label {
+  font-family: 'Space Mono', monospace; font-size: 0.48rem; color: var(--purple);
+}
+
+/* Arcium tag on revealed cards */
+.pc-arcium-tag {
+  font-size: 0.42rem; color: var(--acc); opacity: 0.7;
+  background: rgba(0,245,196,0.06); border: 1px solid rgba(0,245,196,0.15);
+  padding: 1px 4px; border-radius: 2px; margin-left: 2px;
+}
+
+/* Reveal button */
+.pos-btn.reveal-b {
+  border-color: var(--purple); color: var(--purple); background: rgba(155,108,255,0.08);
+  font-size: 0.5rem !important;
+  white-space: nowrap;
+  padding: 4px 10px !important;
+}
+.pos-btn.reveal-b:hover {
+  background: var(--purple); color: #fff;
+}
+
+/* Arcium notice in order panel */
+.arcium-notice {
+  display: flex; align-items: flex-start; gap: 8px;
+  background: rgba(155,108,255,0.06); border: 1px solid rgba(155,108,255,0.2);
+  border-radius: 4px; padding: 8px 10px;
+}
+.arcium-notice-icon { font-size: 1rem; flex-shrink: 0; margin-top: 1px; }
+.arcium-notice-text { display: flex; flex-direction: column; gap: 2px; }
+.arcium-notice-title { font-size: 0.52rem; font-weight: 700; color: var(--purple); letter-spacing: 0.06em; }
+.arcium-notice-sub   { font-size: 0.44rem; color: var(--muted); line-height: 1.5; }
+
+/* Encrypted card in order panel sidebar */
+.op-pos-card-enc {
+  background: rgba(155,108,255,0.04) !important;
+  border-color: rgba(155,108,255,0.2) !important;
+}
+.op-enc-badge {
+  margin-left: auto; font-size: 0.44rem; color: var(--purple);
+  background: rgba(155,108,255,0.1); border: 1px solid rgba(155,108,255,0.2);
+  padding: 1px 5px; border-radius: 2px; letter-spacing: 0.04em;
+}
+.op-enc-info {
+  font-size: 0.44rem; color: var(--muted); font-style: italic;
+  padding: 2px 0; letter-spacing: 0.04em;
+}
+
+/* ════════════════════════════════════════════════
+   Compact position cards in strip
+════════════════════════════════════════════════ */
 .pos-cards { display:flex; flex-direction:column; }
 .pos-card {
   display:flex; align-items:center; padding:6px 12px; gap:10px;
@@ -318,7 +466,7 @@ body::before {
 .pos-card:hover { background:rgba(0,245,196,0.02); }
 .pc-left  { display:flex; flex-direction:column; gap:2px; min-width:90px; flex-shrink:0; }
 .pc-sym   { font-size:0.62rem; font-weight:700; color:var(--txt2); }
-.pc-meta  { display:flex; gap:4px; align-items:center; }
+.pc-meta  { display:flex; gap:4px; align-items:center; flex-wrap: wrap; }
 .pos-dir  { font-size:0.48rem; font-weight:700; padding:1px 5px; border-radius:2px; letter-spacing:0.05em; }
 .pos-dir.L { background:rgba(0,230,118,0.15); color:var(--long); }
 .pos-dir.S { background:rgba(255,22,80,0.15);  color:var(--short); }
@@ -338,7 +486,9 @@ body::before {
 
 .pc-actions { display:flex; gap:4px; flex-shrink:0; }
 
-/* History table */
+/* ════════════════════════════════════════════════
+   History table — Desktop
+════════════════════════════════════════════════ */
 .pos-table { width:100%; border-collapse:collapse; }
 .pos-table th {
   font-size:0.42rem; color:var(--muted); text-transform:uppercase;
@@ -357,7 +507,17 @@ body::before {
 .liq-price { color:var(--short); }
 .pos-actions-cell { display:flex; gap:3px; }
 
-/* Action buttons */
+/* Desktop history table: hide on mobile */
+.desktop-hist-table { display: table; }
+
+/* ════════════════════════════════════════════════
+   History — Mobile Cards
+════════════════════════════════════════════════ */
+.hist-cards-mobile { display: none; }
+
+/* ════════════════════════════════════════════════
+   Action buttons
+════════════════════════════════════════════════ */
 .pos-btn {
   padding:3px 7px; border-radius:2px; font-size:0.46rem;
   font-weight:700; cursor:pointer; transition:all 0.15s;
@@ -374,14 +534,14 @@ body::before {
 .pos-empty-padded { padding:40px; }
 
 /* ════════════════════════════════════════════════
-   Order Panel  — RIGHT side
+   Order Panel
 ════════════════════════════════════════════════ */
 .order-panel {
   width: var(--panel-w); flex-shrink: 0;
   background: var(--surf); border-left: 1px solid var(--b1);
   display: flex; flex-direction: column;
   overflow-y: auto; overflow-x: hidden;
-  order: 2;   /* RIGHT of chart */
+  order: 2;
 }
 .order-panel::-webkit-scrollbar { width:2px; }
 .order-panel::-webkit-scrollbar-thumb { background:var(--b2); }
@@ -477,7 +637,7 @@ body::before {
   display:flex; flex-direction:column; gap:5px; transition:border-color 0.15s;
 }
 .op-pos-card:hover { border-color:var(--b2); }
-.op-pos-top { display:flex; align-items:center; gap:5px; }
+.op-pos-top { display:flex; align-items:center; gap:5px; flex-wrap: wrap; }
 .op-pos-sym { font-size:0.6rem; font-weight:700; color:var(--txt2); }
 .op-pos-pnl { margin-left:auto; text-align:right; }
 .op-pos-pnl-usd { font-family:'Space Mono',monospace; font-size:0.68rem; font-weight:700; }
@@ -488,9 +648,8 @@ body::before {
 .op-pos-row  { display:flex; flex-direction:column; gap:1px; }
 .op-pos-l    { font-size:0.42rem; color:var(--muted); }
 .op-pos-v    { font-family:'Space Mono',monospace; font-size:0.5rem; color:var(--txt2); }
-.op-pos-btns { display:flex; gap:4px; }
+.op-pos-btns { display:flex; gap:4px; flex-wrap: wrap; }
 
-/* Order book — hidden (positions shown in order panel) */
 .book { display:none; }
 
 /* ════════════════════════════════════════════════
@@ -632,15 +791,138 @@ body::before {
   body { overflow:auto; }
   .app  { height:auto; min-height:100vh; overflow:visible; }
   .body { flex-direction:column; height:auto; overflow:visible; }
+
+  /* Chart area */
   .chart-area  { min-height:320px; order:1; }
   .chart-box   { min-height:280px; }
+
+  /* Chart expanded on mobile */
+  .chart-area-expanded .chart-box { min-height: 70vh !important; }
+  .chart-area-expanded { min-height: 80vh; }
+  .chart-area-expanded .pos-strip { display: none; }
+
   .order-panel { width:100%; max-height:none; border-left:none; border-top:1px solid var(--b1); order:2; }
-  .pos-strip   { max-height:220px; }
+  .pos-strip   { max-height:none; }
   .stat-cards  { grid-template-columns:1fr 1fr; }
   .pnl-card    { width:calc(100vw - 28px); }
   .pnl-big     { font-size:1.7rem; }
   .navbar      { padding:0 10px; }
   .brand-gem   { width:26px; height:26px; font-size:0.75rem; }
   .brand-name  { font-size:0.56rem; }
-  .brand-tag, .devnet-badge { display:none; }
+
+  /* ── Mobile History Cards ── */
+  .desktop-hist-table { display: none !important; }
+  .hist-cards-mobile  { display: flex; flex-direction: column; gap: 0; }
+
+  .hist-card {
+    margin: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--b1);
+    background: var(--surf2);
+    overflow: hidden;
+    transition: border-color 0.15s;
+  }
+  .hist-card-up { border-left: 3px solid var(--long); }
+  .hist-card-dn { border-left: 3px solid var(--short); }
+
+  .hc-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 12px 6px;
+    border-bottom: 1px solid var(--b1);
+  }
+  .hc-market {
+    display: flex; align-items: center; gap: 6px;
+  }
+  .hc-sym {
+    font-size: 0.72rem; font-weight: 700; color: var(--txt2);
+    font-family: 'Space Mono', monospace;
+  }
+  .hc-pnl {
+    display: flex; flex-direction: column; align-items: flex-end; gap: 1px;
+  }
+  .hc-pnl-usd {
+    font-family: 'Space Mono', monospace; font-size: 0.82rem; font-weight: 700;
+  }
+  .hc-pnl-pct {
+    font-family: 'Space Mono', monospace; font-size: 0.58rem; font-weight: 700;
+  }
+  .hc-pnl-usd.up, .hc-pnl-pct.up { color: var(--long); }
+  .hc-pnl-usd.dn, .hc-pnl-pct.dn { color: var(--short); }
+
+  .hc-grid {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 0; padding: 8px 12px;
+  }
+  .hc-item {
+    display: flex; flex-direction: column; gap: 2px;
+    padding: 5px 0; border-bottom: 1px solid rgba(12,30,53,0.5);
+  }
+  .hc-item:nth-child(odd)  { padding-right: 10px; border-right: 1px solid rgba(12,30,53,0.5); }
+  .hc-item:nth-child(even) { padding-left: 10px; }
+  .hc-item:nth-last-child(-n+2) { border-bottom: none; }
+
+  .hc-label {
+    font-size: 0.44rem; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.08em;
+  }
+  .hc-value {
+    font-family: 'Space Mono', monospace; font-size: 0.62rem; color: var(--txt2); font-weight: 700;
+  }
+  .hc-time { color: var(--muted); font-weight: 400; font-size: 0.58rem; }
+
+  .hc-footer {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 7px 12px;
+    border-top: 1px solid var(--b1);
+    background: rgba(0,0,0,0.2);
+  }
+  .hc-status {
+    font-size: 0.52rem; font-weight: 700; letter-spacing: 0.06em;
+  }
+  .hc-status.up { color: var(--long); }
+  .hc-status.dn { color: var(--short); }
+
+  /* ── Mobile encrypted position card ── */
+  .pos-card-encrypted {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 8px !important;
+    padding: 10px 12px !important;
+  }
+  .pce-left  { min-width: unset !important; width: 100%; }
+  .pce-right { align-items: flex-start !important; width: 100%; }
+  .pce-center { width: 100%; }
+  .pos-btn.reveal-b {
+    width: 100%; text-align: center;
+    padding: 8px 0 !important; font-size: 0.58rem !important;
+    justify-content: center;
+  }
+
+  /* ── Mobile revealed position card ── */
+  .pos-card-revealed {
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+    padding: 10px 12px !important;
+  }
+  .pc-left  { min-width: 100% !important; }
+  .pc-prices { min-width: 120px; }
+  .pc-actions { flex-wrap: wrap; width: 100%; justify-content: flex-end; }
+
+  /* ── Arcium notice compact ── */
+  .arcium-notice-sub { display: none; }
+}
+
+@media (max-width: 480px) {
+  .hud-timeframes { gap: 0; padding: 2px; }
+  .hud-tf-btn     { padding: 3px 7px; font-size: 0.54rem; }
+  .buy-quick, .sell-quick { padding: 4px 8px; font-size: 0.56rem; }
+
+  .hist-card  { margin: 6px 8px; }
+  .hc-sym     { font-size: 0.64rem; }
+  .hc-pnl-usd { font-size: 0.72rem; }
+  .hc-value   { font-size: 0.56rem; }
+
+  .pnl-big { font-size: 1.4rem; }
+  .stat-cards { grid-template-columns: 1fr 1fr; gap: 6px; }
+  .sc-val { font-size: 0.82rem; }
 }

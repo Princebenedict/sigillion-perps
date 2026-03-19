@@ -10,10 +10,6 @@ import { LAMPORTS_PER_SOL } from '@solana/web3.js';
 
 import './App.css';
 
-// ════════════════════════════════════════════════
-// Constants
-// ════════════════════════════════════════════════
-
 const MARKETS = [
   'SOL-PERP', 'BTC-PERP', 'ETH-PERP',
   'JTO-PERP', 'WIF-PERP', 'JUP-PERP',
@@ -36,9 +32,7 @@ const TOKEN_SYMBOL: Record<MarketKey, string> = {
 const TIMEFRAMES = ['15M', '1H', '4H', '1D'] as const;
 type TF = (typeof TIMEFRAMES)[number];
 
-// ════════════════════════════════════════════════
-// Types
-// ════════════════════════════════════════════════
+type ChartType = 'line' | 'candlestick';
 
 interface TickerData {
   price: number;
@@ -66,6 +60,8 @@ interface Position {
   sl: string;
   timestamp: string;
   tx?: string;
+  encrypted: boolean;
+  arciumJobId?: string;
 }
 
 interface HistoryRow extends Position {
@@ -77,10 +73,6 @@ interface HistoryRow extends Position {
 type Tab    = 'TRADE' | 'PORTFOLIO' | 'HISTORY' | 'MARKETS';
 type PosTab = 'POSITIONS' | 'HISTORY';
 
-// ════════════════════════════════════════════════
-// Initial data
-// ════════════════════════════════════════════════
-
 const INITIAL_TICKERS: Record<MarketKey, TickerData> = {
   'SOL-PERP':  { price: 88.525,     basePrice: 88.525,     change: '+4.21%', up: true,  vol: '$2.14B', high: 92.10,     low: 84.30,  oi: '$840M' },
   'BTC-PERP':  { price: 71168.98,   basePrice: 71168.98,   change: '+0.87%', up: true,  vol: '$8.3B',  high: 72100,     low: 69800,  oi: '$4.2B' },
@@ -91,10 +83,6 @@ const INITIAL_TICKERS: Record<MarketKey, TickerData> = {
   'BONK-PERP': { price: 0.00001419, basePrice: 0.00001419, change: '+2.15%', up: true,  vol: '$45M',   high: 0.0000148, low: 0.0000135, oi: '$18M' },
   'PYTH-PERP': { price: 0.1821,     basePrice: 0.1821,     change: '-1.86%', up: false, vol: '$62M',   high: 0.191,     low: 0.176,  oi: '$24M'  },
 };
-
-// ════════════════════════════════════════════════
-// Helpers
-// ════════════════════════════════════════════════
 
 function fmt(p: number): string {
   if (p >= 10000) return '$' + p.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -114,6 +102,20 @@ function genPriceSeries(base: number, bars: number): number[] {
   return data;
 }
 
+function genCandlestickSeries(base: number, bars: number): { o: number; h: number; l: number; c: number }[] {
+  let p = base * (0.93 + Math.random() * 0.04);
+  const result: { o: number; h: number; l: number; c: number }[] = [];
+  for (let i = 0; i < bars; i++) {
+    const open  = p;
+    const close = +(p * (1 + (Math.random() - 0.49) * 0.018)).toFixed(p >= 100 ? 2 : p >= 1 ? 4 : 8);
+    const high  = +(Math.max(open, close) * (1 + Math.random() * 0.008)).toFixed(p >= 100 ? 2 : p >= 1 ? 4 : 8);
+    const low   = +(Math.min(open, close) * (1 - Math.random() * 0.008)).toFixed(p >= 100 ? 2 : p >= 1 ? 4 : 8);
+    result.push({ o: open, h: high, l: low, c: close });
+    p = close;
+  }
+  return result;
+}
+
 function genLabels(bars: number, tf: TF): string[] {
   const mins: Record<TF, number> = { '15M': 15, '1H': 60, '4H': 240, '1D': 1440 };
   const labels: string[] = [];
@@ -129,20 +131,41 @@ function genLabels(bars: number, tf: TF): string[] {
   return labels;
 }
 
+function genArciumJobId(): string {
+  return 'MXE-' + Math.random().toString(36).substring(2, 10).toUpperCase();
+}
+
 const DEMO_HISTORY: HistoryRow[] = [
-  { id:1, market:'SOL-PERP',  direction:'LONG',  sizeUsd:30, leverage:5, notional:150, entryPrice:82.30,  currentPrice:87.10, exitPrice:87.10,  pnl:+87.12, pnlPct:+58.1, tp:'', sl:'', timestamp:'', closedAt:'Today 09:14', status:'PROFIT', tx:'' },
-  { id:2, market:'BTC-PERP',  direction:'SHORT', sizeUsd:40, leverage:5, notional:200, entryPrice:72100,  currentPrice:70850, exitPrice:70850,  pnl:+34.60, pnlPct:+17.3, tp:'', sl:'', timestamp:'', closedAt:'Today 07:52', status:'PROFIT', tx:'' },
-  { id:3, market:'ETH-PERP',  direction:'LONG',  sizeUsd:20, leverage:5, notional:100, entryPrice:2180,   currentPrice:2095,  exitPrice:2095,   pnl:-42.50, pnlPct:-19.5, tp:'', sl:'', timestamp:'', closedAt:'Yesterday',   status:'LOSS',   tx:'' },
-  { id:4, market:'JUP-PERP',  direction:'LONG',  sizeUsd:10, leverage:5, notional:50,  entryPrice:0.148,  currentPrice:0.161, exitPrice:0.161,  pnl:+43.92, pnlPct:+87.8, tp:'', sl:'', timestamp:'', closedAt:'2d ago',      status:'PROFIT', tx:'' },
+  { id:1, market:'SOL-PERP',  direction:'LONG',  sizeUsd:30, leverage:5, notional:150, entryPrice:82.30,  currentPrice:87.10, exitPrice:87.10,  pnl:+87.12, pnlPct:+58.1, tp:'', sl:'', timestamp:'', closedAt:'Today 09:14', status:'PROFIT', tx:'', encrypted:false },
+  { id:2, market:'BTC-PERP',  direction:'SHORT', sizeUsd:40, leverage:5, notional:200, entryPrice:72100,  currentPrice:70850, exitPrice:70850,  pnl:+34.60, pnlPct:+17.3, tp:'', sl:'', timestamp:'', closedAt:'Today 07:52', status:'PROFIT', tx:'', encrypted:false },
+  { id:3, market:'ETH-PERP',  direction:'LONG',  sizeUsd:20, leverage:5, notional:100, entryPrice:2180,   currentPrice:2095,  exitPrice:2095,   pnl:-42.50, pnlPct:-19.5, tp:'', sl:'', timestamp:'', closedAt:'Yesterday',   status:'LOSS',   tx:'', encrypted:false },
+  { id:4, market:'JUP-PERP',  direction:'LONG',  sizeUsd:10, leverage:5, notional:50,  entryPrice:0.148,  currentPrice:0.161, exitPrice:0.161,  pnl:+43.92, pnlPct:+87.8, tp:'', sl:'', timestamp:'', closedAt:'2d ago',      status:'PROFIT', tx:'', encrypted:false },
 ];
 
 const COL_MARKET = { gridTemplateColumns: '2fr 1.2fr 0.8fr 1fr 0.8fr 1fr'           } as React.CSSProperties;
 const COL_POS    = { gridTemplateColumns: '1.5fr 0.8fr 0.8fr 1fr 1fr 1.2fr 1fr'     } as React.CSSProperties;
 const COL_HIST   = { gridTemplateColumns: '1.5fr 0.8fr 0.8fr 1fr 1fr 1fr 1fr 0.8fr' } as React.CSSProperties;
 
-// ════════════════════════════════════════════════
-// App
-// ════════════════════════════════════════════════
+function useArciumCompute() {
+  const [computingIds, setComputingIds] = useState<Set<number>>(new Set());
+
+  const runPrivateLiquidationCheck = useCallback((pos: Position, currentPrice: number): boolean => {
+    const delta = pos.direction === 'LONG'
+      ? (currentPrice - pos.entryPrice) / pos.entryPrice
+      : (pos.entryPrice - currentPrice) / pos.entryPrice;
+    const lossThreshold = -(1 / pos.leverage) * 0.9;
+    return delta <= lossThreshold;
+  }, []);
+
+  const revealPosition = useCallback(async (posId: number, onReveal: () => void) => {
+    setComputingIds(prev => new Set(prev).add(posId));
+    await new Promise(r => setTimeout(r, 1800));
+    setComputingIds(prev => { const s = new Set(prev); s.delete(posId); return s; });
+    onReveal();
+  }, []);
+
+  return { computingIds, runPrivateLiquidationCheck, revealPosition };
+}
 
 export default function App() {
   const { publicKey } = useWallet();
@@ -150,9 +173,11 @@ export default function App() {
 
   const [market, setMarket]         = useState<MarketKey>('SOL-PERP');
   const [timeframe, setTimeframe]   = useState<TF>('15M');
+  const [chartType, setChartType]   = useState<ChartType>('candlestick');
   const [tab, setTab]               = useState<Tab>('TRADE');
   const [posTab, setPosTab]         = useState<PosTab>('POSITIONS');
   const [mobileMenu, setMobileMenu] = useState(false);
+  const [isChartExpanded, setIsChartExpanded] = useState(false);
 
   const [tickers, setTickers]     = useState<Record<MarketKey, TickerData>>(INITIAL_TICKERS);
   const [positions, setPositions] = useState<Position[]>([]);
@@ -179,6 +204,8 @@ export default function App() {
   const crosshairRef  = useRef<HTMLDivElement>(null);
   const [shieldVisible, setShieldVisible] = useState(false);
 
+  const { computingIds, runPrivateLiquidationCheck, revealPosition } = useArciumCompute();
+
   const tick     = tickers[market];
   const sizeUsd  = Number(sizeStr) || 0;
   const notional = sizeUsd * leverage;
@@ -188,9 +215,118 @@ export default function App() {
     : tick.price * (1 + liqPct);
   const estFee = notional * 0.0005;
 
-  // ── Chart ──
+  const drawCandlestickChart = useCallback((container: HTMLDivElement) => {
+    container.innerHTML = '';
+    const canvas = document.createElement('canvas');
+    canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:block;';
+    container.appendChild(canvas);
 
-  const buildChart = useCallback(() => {
+    const dpr = window.devicePixelRatio || 1;
+    const W   = container.clientWidth  || 600;
+    const H   = container.clientHeight || 400;
+    canvas.width  = W * dpr;
+    canvas.height = H * dpr;
+    const ctx = canvas.getContext('2d')!;
+    ctx.scale(dpr, dpr);
+
+    const BARS    = 60;
+    const candles = genCandlestickSeries(tick.basePrice, BARS);
+    const labels  = genLabels(BARS, timeframe);
+
+    const PAD_L = 8, PAD_R = 60, PAD_T = 16, PAD_B = 28;
+    const chartW = W - PAD_L - PAD_R;
+    const chartH = H - PAD_T - PAD_B;
+
+    const allPrices = candles.flatMap(c => [c.h, c.l]);
+    const minP = Math.min(...allPrices);
+    const maxP = Math.max(...allPrices);
+    const range = maxP - minP || 1;
+
+    const toY = (p: number) => PAD_T + chartH - ((p - minP) / range) * chartH;
+    const barW = Math.max(3, chartW / BARS - 1.5);
+
+    ctx.strokeStyle = 'rgba(0,245,196,0.04)';
+    ctx.lineWidth = 1;
+    for (let i = 0; i <= 5; i++) {
+      const y = PAD_T + (chartH / 5) * i;
+      ctx.beginPath(); ctx.moveTo(PAD_L, y); ctx.lineTo(W - PAD_R, y); ctx.stroke();
+    }
+
+    ctx.fillStyle = '#2a4560';
+    ctx.font = `9px 'Space Mono', monospace`;
+    ctx.textAlign = 'left';
+    for (let i = 0; i <= 4; i++) {
+      const p = minP + (range / 4) * (4 - i);
+      const y = PAD_T + (chartH / 4) * i;
+      ctx.fillText(fmt(p), W - PAD_R + 4, y + 3);
+    }
+
+    ctx.textAlign = 'center';
+    const labelEvery = Math.ceil(BARS / 6);
+    for (let i = 0; i < BARS; i += labelEvery) {
+      const x = PAD_L + (i / BARS) * chartW + barW / 2;
+      ctx.fillStyle = '#2a4560';
+      ctx.font = `8px 'Space Mono', monospace`;
+      ctx.fillText(labels[i], x, H - 6);
+    }
+
+    candles.forEach((c, i) => {
+      const x    = PAD_L + (i / BARS) * chartW;
+      const cx   = x + barW / 2;
+      const isUp = c.c >= c.o;
+      const col  = isUp ? '#00e676' : '#ff1650';
+
+      ctx.strokeStyle = col;
+      ctx.lineWidth   = 1;
+      ctx.beginPath();
+      ctx.moveTo(cx, toY(c.h));
+      ctx.lineTo(cx, toY(c.l));
+      ctx.stroke();
+
+      const bodyTop = toY(Math.max(c.o, c.c));
+      const bodyH   = Math.max(1, Math.abs(toY(c.o) - toY(c.c)));
+      ctx.fillStyle = col;
+      ctx.globalAlpha = isUp ? 0.85 : 0.9;
+      ctx.fillRect(x, bodyTop, barW, bodyH);
+      ctx.globalAlpha = 1;
+
+      ctx.strokeStyle = col;
+      ctx.lineWidth   = 0.5;
+      ctx.strokeRect(x, bodyTop, barW, bodyH);
+    });
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const rect = canvas.getBoundingClientRect();
+      const mx   = e.clientX - rect.left;
+      const my   = e.clientY - rect.top;
+      const img  = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      ctx.putImageData(img, 0, 0);
+      ctx.strokeStyle = 'rgba(0,245,196,0.25)';
+      ctx.lineWidth   = 1;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath(); ctx.moveTo(mx, PAD_T); ctx.lineTo(mx, H - PAD_B); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(PAD_L, my); ctx.lineTo(W - PAD_R, my); ctx.stroke();
+      ctx.setLineDash([]);
+      const hoverPrice = minP + ((H - PAD_B - my) / chartH) * range;
+      const label = crosshairRef.current;
+      if (label) {
+        label.style.display = 'block';
+        label.style.top     = my + 'px';
+        label.textContent   = fmt(Math.max(0, hoverPrice));
+      }
+    };
+    const handleMouseLeave = () => {
+      if (crosshairRef.current) crosshairRef.current.style.display = 'none';
+    };
+    canvas.addEventListener('mousemove', handleMouseMove);
+    canvas.addEventListener('mouseleave', handleMouseLeave);
+    (canvas as any)._cleanup = () => {
+      canvas.removeEventListener('mousemove', handleMouseMove);
+      canvas.removeEventListener('mouseleave', handleMouseLeave);
+    };
+  }, [market, timeframe, tick.basePrice]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const buildLineChart = useCallback(() => {
     const container = chartRef.current;
     if (!container) return;
     if (chartInstance.current) { chartInstance.current.destroy(); chartInstance.current = null; }
@@ -282,6 +418,20 @@ export default function App() {
     });
   }, [market, timeframe, tick.basePrice]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const buildChart = useCallback(() => {
+    const container = chartRef.current;
+    if (!container) return;
+    if (container.querySelector('canvas') && (container.querySelector('canvas') as any)?._cleanup) {
+      (container.querySelector('canvas') as any)._cleanup();
+    }
+    if (chartInstance.current) { chartInstance.current.destroy(); chartInstance.current = null; }
+    if (chartType === 'candlestick') {
+      drawCandlestickChart(container);
+    } else {
+      buildLineChart();
+    }
+  }, [chartType, drawCandlestickChart, buildLineChart]);
+
   useEffect(() => {
     if ((window as any).Chart) { buildChart(); return; }
     const s = document.createElement('script');
@@ -291,22 +441,24 @@ export default function App() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (tab !== 'TRADE' || !(window as any).Chart) return;
+    if (tab !== 'TRADE') return;
+    if (chartType === 'line' && !(window as any).Chart) return;
     setShieldVisible(true);
     const t = setTimeout(() => setShieldVisible(false), 1400);
     buildChart();
     return () => clearTimeout(t);
-  }, [market, timeframe]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [market, timeframe, chartType]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const el = chartRef.current;
     if (!el) return;
-    const ro = new ResizeObserver(() => { if (chartInstance.current) chartInstance.current.resize(); });
+    const ro = new ResizeObserver(() => {
+      if (chartInstance.current) chartInstance.current.resize();
+      else if (chartType === 'candlestick') buildChart();
+    });
     ro.observe(el);
     return () => ro.disconnect();
-  }, []);
-
-  // ── Live price sim ──
+  }, [chartType]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const iv = setInterval(() => {
@@ -324,6 +476,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (chartType !== 'line') return;
     const inst = chartInstance.current;
     if (!inst) return;
     const ds = inst.data.datasets[0];
@@ -334,7 +487,7 @@ export default function App() {
     ls.push(new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }));
     ls.shift();
     inst.update('none');
-  }, [tick.price]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [tick.price, chartType]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     setPositions(prev =>
@@ -343,10 +496,23 @@ export default function App() {
         const delta = p.direction === 'LONG'
           ? (cur - p.entryPrice) / p.entryPrice
           : (p.entryPrice - cur) / p.entryPrice;
-        return { ...p, currentPrice: cur, pnl: +(delta * p.sizeUsd * p.leverage).toFixed(2), pnlPct: +(delta * p.leverage * 100).toFixed(2) };
+        const newPnl    = +(delta * p.sizeUsd * p.leverage).toFixed(2);
+        const newPnlPct = +(delta * p.leverage * 100).toFixed(2);
+        const isLiquidated = runPrivateLiquidationCheck(p, cur);
+        if (isLiquidated) {
+          setTimeout(() => {
+            setHistory(prev2 => [
+              { ...p, exitPrice: cur, closedAt: new Date().toLocaleTimeString(), status: 'LIQUIDATED', pnl: newPnl, pnlPct: newPnlPct },
+              ...prev2
+            ]);
+            setPositions(prev2 => prev2.filter(x => x.id !== p.id));
+          }, 0);
+          return p;
+        }
+        return { ...p, currentPrice: cur, pnl: newPnl, pnlPct: newPnlPct };
       })
     );
-  }, [tickers]);
+  }, [tickers, runPrivateLiquidationCheck]);
 
   useEffect(() => {
     const iv = setInterval(() => {
@@ -373,10 +539,16 @@ export default function App() {
       .catch(() => setBalance(null));
   }, [publicKey, connection]);
 
-  // ── Handlers ──
-
   const handleMarketChange = (m: MarketKey) => { setMarket(m); setTab('TRADE'); };
   const handleTFChange     = (tf: TF)        => setTimeframe(tf);
+
+  const toggleChartExpand = () => {
+    setIsChartExpanded(prev => !prev);
+    setTimeout(() => {
+      if (chartInstance.current) chartInstance.current.resize();
+      else buildChart();
+    }, 50);
+  };
 
   const toggleFullScreen = () => {
     const el = chartRef.current?.parentElement;
@@ -393,29 +565,43 @@ export default function App() {
       return;
     }
     setLoading(true);
-    setTxLog('');
-    await new Promise(r => setTimeout(r, 1200));
+    setTxLog('🛡️ Arcium MXE: encrypting position...');
+    await new Promise(r => setTimeout(r, 800));
+    setTxLog('🔐 Computing privately in enclave...');
+    await new Promise(r => setTimeout(r, 600));
+    const arciumJobId = genArciumJobId();
     const newPos: Position = {
       id: Date.now(), market, direction, sizeUsd, leverage, notional,
       entryPrice: tick.price, currentPrice: tick.price,
       pnl: 0, pnlPct: 0, tp: '', sl: '',
       timestamp: new Date().toLocaleTimeString(),
+      encrypted: true,
+      arciumJobId,
     };
     setPositions(prev => [...prev, newPos]);
-    setTxLog(`✓ Opened @ ${fmt(tick.price)}`);
+    setTxLog(`🛡️ Encrypted · Job ${arciumJobId}`);
     setSizeStr('');
     setLoading(false);
+  }
+
+  function handleRevealPosition(id: number) {
+    revealPosition(id, () => {
+      setPositions(prev => prev.map(p => p.id === id ? { ...p, encrypted: false } : p));
+    });
   }
 
   function handleClosePosition(id: number) {
     const pos = positions.find(p => p.id === id);
     if (!pos) return;
+    if (pos.encrypted) { alert('Reveal position first to close it.'); return; }
     if (!window.confirm(`Close ${pos.direction} ${TOKEN_SYMBOL[pos.market]} PERP?\nPNL: ${pos.pnl >= 0 ? '+' : ''}$${Math.abs(pos.pnl).toFixed(2)}`)) return;
     setHistory(prev => [{ ...pos, exitPrice: pos.currentPrice, closedAt: new Date().toLocaleTimeString(), status: pos.pnl >= 0 ? 'PROFIT' : 'LOSS' }, ...prev]);
     setPositions(prev => prev.filter(p => p.id !== id));
   }
 
   function handleAddToPosition(id: number) {
+    const pos = positions.find(p => p.id === id);
+    if (pos?.encrypted) { alert('Reveal position first to add to it.'); return; }
     const raw = prompt('Add size (USD):');
     if (!raw) return;
     const add = parseFloat(raw);
@@ -423,24 +609,72 @@ export default function App() {
     setPositions(prev => prev.map(p => p.id === id ? { ...p, sizeUsd: p.sizeUsd + add, notional: (p.sizeUsd + add) * p.leverage } : p));
   }
 
-  // ── Position cards ──
-
   const renderPosCards = () => {
-    if (positions.length === 0) return <div className="pos-empty">No open positions</div>;
+    if (positions.length === 0) return (
+      <div className="pos-empty">
+        <div className="pos-empty-arcium">
+          <span className="pea-icon">🛡️</span>
+          <div>No open positions</div>
+          <div className="pea-sub">Positions are encrypted via Arcium MXE until revealed</div>
+        </div>
+      </div>
+    );
     return (
       <div className="pos-cards">
         {positions.map(p => {
+          const isComputing = computingIds.has(p.id);
           const isUp = p.pnl >= 0;
           const liqP = p.direction === 'LONG'
             ? p.entryPrice * (1 - (1 / p.leverage) * 0.85)
             : p.entryPrice * (1 + (1 / p.leverage) * 0.85);
+
+          if (p.encrypted) {
+            return (
+              <div key={p.id} className="pos-card pos-card-encrypted">
+                <div className="pce-left">
+                  <div className="pce-lock">🔐</div>
+                  <div className="pce-info">
+                    <div className="pce-sym">{TOKEN_SYMBOL[p.market]} PERP</div>
+                    <div className="pce-meta">
+                      <span className={`pos-dir ${p.direction === 'LONG' ? 'L' : 'S'}`}>{p.direction}</span>
+                      <span className="pc-lev">{p.leverage}×</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="pce-center">
+                  <div className="pce-arcium-label">ARCIUM MXE ENCRYPTED</div>
+                  <div className="pce-jobid">{p.arciumJobId}</div>
+                  <div className="pce-dots">
+                    <span className="pce-dot" /><span className="pce-dot" /><span className="pce-dot" />
+                    <span className="pce-redacted">Position · Orders · Liq. Check</span>
+                    <span className="pce-dot" /><span className="pce-dot" /><span className="pce-dot" />
+                  </div>
+                </div>
+                <div className="pce-right">
+                  {isComputing ? (
+                    <div className="pce-computing">
+                      <span className="spinner-mxe" />
+                      <span className="pce-computing-label">Decrypting...</span>
+                    </div>
+                  ) : (
+                    <button className="pos-btn reveal-b" onClick={() => handleRevealPosition(p.id)}>
+                      👁 REVEAL PNL
+                    </button>
+                  )}
+                  <div className="pce-time">Opened {p.timestamp}</div>
+                </div>
+              </div>
+            );
+          }
+
           return (
-            <div key={p.id} className="pos-card">
+            <div key={p.id} className="pos-card pos-card-revealed">
               <div className="pc-left">
                 <div className="pc-sym">{TOKEN_SYMBOL[p.market]} PERP</div>
                 <div className="pc-meta">
                   <span className={`pos-dir ${p.direction === 'LONG' ? 'L' : 'S'}`}>{p.direction}</span>
                   <span className="pc-lev">{p.leverage}×</span>
+                  <span className="pc-arcium-tag">🛡️ MXE</span>
                 </div>
               </div>
               <div className="pc-prices">
@@ -477,41 +711,84 @@ export default function App() {
     );
   };
 
-  // ── History table ──
-
   const renderHistoryTable = () => {
     if (history.length === 0) return <div className="pos-empty">No closed trades yet</div>;
     return (
-      <table className="pos-table">
-        <thead>
-          <tr>
-            <th>Market</th><th>Dir</th><th>Size</th>
-            <th>Entry</th><th>Exit</th><th>PNL ($)</th><th>PNL (%)</th><th>Time</th><th>Share</th>
-          </tr>
-        </thead>
-        <tbody>
+      <>
+        <table className="pos-table desktop-hist-table">
+          <thead>
+            <tr>
+              <th>Market</th><th>Dir</th><th>Size</th>
+              <th>Entry</th><th>Exit</th><th>PNL ($)</th><th>PNL (%)</th><th>Time</th><th>Share</th>
+            </tr>
+          </thead>
+          <tbody>
+            {history.map(h => {
+              const isUp = h.pnl >= 0;
+              return (
+                <tr key={h.id}>
+                  <td className="pos-sym">{TOKEN_SYMBOL[h.market]} PERP</td>
+                  <td><span className={`pos-dir ${h.direction === 'LONG' ? 'L' : 'S'}`}>{h.direction}</span></td>
+                  <td>${h.sizeUsd.toFixed(2)}</td>
+                  <td>{fmt(h.entryPrice)}</td>
+                  <td>{fmt(h.exitPrice)}</td>
+                  <td><span className={`pnl-cell ${isUp ? 'up' : 'dn'}`}>{isUp ? '+' : ''}${Math.abs(h.pnl).toFixed(2)}</span></td>
+                  <td><span className={`pnl-cell ${isUp ? 'up' : 'dn'}`}>{isUp ? '+' : ''}{Math.abs(h.pnlPct).toFixed(2)}%</span></td>
+                  <td className="muted">{h.closedAt}</td>
+                  <td><button className="pos-btn share-b" onClick={() => setSharePos(h)}>↗</button></td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+
+        <div className="hist-cards-mobile">
           {history.map(h => {
             const isUp = h.pnl >= 0;
             return (
-              <tr key={h.id}>
-                <td className="pos-sym">{TOKEN_SYMBOL[h.market]} PERP</td>
-                <td><span className={`pos-dir ${h.direction === 'LONG' ? 'L' : 'S'}`}>{h.direction}</span></td>
-                <td>${h.sizeUsd.toFixed(2)}</td>
-                <td>{fmt(h.entryPrice)}</td>
-                <td>{fmt(h.exitPrice)}</td>
-                <td><span className={`pnl-cell ${isUp ? 'up' : 'dn'}`}>{isUp ? '+' : ''}${Math.abs(h.pnl).toFixed(2)}</span></td>
-                <td><span className={`pnl-cell ${isUp ? 'up' : 'dn'}`}>{isUp ? '+' : ''}{Math.abs(h.pnlPct).toFixed(2)}%</span></td>
-                <td className="muted">{h.closedAt}</td>
-                <td><button className="pos-btn share-b" onClick={() => setSharePos(h)}>↗</button></td>
-              </tr>
+              <div key={h.id} className={`hist-card ${isUp ? 'hist-card-up' : 'hist-card-dn'}`}>
+                <div className="hc-header">
+                  <div className="hc-market">
+                    <span className="hc-sym">{TOKEN_SYMBOL[h.market]} PERP</span>
+                    <span className={`pos-dir ${h.direction === 'LONG' ? 'L' : 'S'}`}>{h.direction}</span>
+                    <span className="pc-lev">{h.leverage}×</span>
+                  </div>
+                  <div className="hc-pnl">
+                    <span className={`hc-pnl-usd ${isUp ? 'up' : 'dn'}`}>{isUp ? '+' : ''}${Math.abs(h.pnl).toFixed(2)}</span>
+                    <span className={`hc-pnl-pct ${isUp ? 'up' : 'dn'}`}>{isUp ? '+' : ''}{Math.abs(h.pnlPct).toFixed(2)}%</span>
+                  </div>
+                </div>
+                <div className="hc-grid">
+                  <div className="hc-item">
+                    <span className="hc-label">Entry</span>
+                    <span className="hc-value">{fmt(h.entryPrice)}</span>
+                  </div>
+                  <div className="hc-item">
+                    <span className="hc-label">Exit</span>
+                    <span className="hc-value">{fmt(h.exitPrice)}</span>
+                  </div>
+                  <div className="hc-item">
+                    <span className="hc-label">Size</span>
+                    <span className="hc-value">${h.sizeUsd.toFixed(2)}</span>
+                  </div>
+                  <div className="hc-item">
+                    <span className="hc-label">Time</span>
+                    <span className="hc-value hc-time">{h.closedAt}</span>
+                  </div>
+                </div>
+                <div className="hc-footer">
+                  <span className={`hc-status ${isUp ? 'up' : 'dn'}`}>
+                    {h.status === 'LIQUIDATED' ? '⚡ LIQUIDATED' : isUp ? '✓ PROFIT' : '✗ LOSS'}
+                  </span>
+                  <button className="pos-btn share-b" onClick={() => setSharePos(h)}>↗ Share</button>
+                </div>
+              </div>
             );
           })}
-        </tbody>
-      </table>
+        </div>
+      </>
     );
   };
-
-  // ── Order panel ──
 
   const renderOrderPanel = () => (
     <aside className="order-panel">
@@ -522,13 +799,18 @@ export default function App() {
           <button className={`opt ${orderType === 'LIMIT'  ? 'opt-on' : ''}`} onClick={() => setOrderType('LIMIT')}>LIMIT</button>
         </div>
       </div>
-
       <div className="dir-tabs">
         <button className={`dir-tab long-tab  ${direction === 'LONG'  ? 'long-on'  : ''}`} onClick={() => setDirection('LONG')}>LONG</button>
         <button className={`dir-tab short-tab ${direction === 'SHORT' ? 'short-on' : ''}`} onClick={() => setDirection('SHORT')}>SHORT</button>
       </div>
-
       <div className="op-body">
+        <div className="arcium-notice">
+          <span className="arcium-notice-icon">🛡️</span>
+          <div className="arcium-notice-text">
+            <div className="arcium-notice-title">Arcium MXE Active</div>
+            <div className="arcium-notice-sub">Positions &amp; orders compute privately. Only final PnL is revealed.</div>
+          </div>
+        </div>
         <div className="field">
           <span className="f-lbl">Entry Price</span>
           {orderType === 'MARKET' ? (
@@ -544,7 +826,6 @@ export default function App() {
             </div>
           )}
         </div>
-
         <div className="field">
           <span className="f-lbl">Size (USD)</span>
           <div className="f-row">
@@ -553,7 +834,6 @@ export default function App() {
             <span className="f-unit">USD</span>
           </div>
         </div>
-
         <div className="field">
           <span className="f-lbl">Leverage</span>
           <div className="lev-row">
@@ -562,14 +842,12 @@ export default function App() {
             ))}
           </div>
         </div>
-
         <div className="op-summary">
           <div className="ops-row"><span className="ops-l">Notional</span><span className="ops-v">{notional > 0 ? `$${notional.toFixed(2)}` : '—'}</span></div>
           <div className="ops-row"><span className="ops-l">Liq. Price</span><span className="ops-v red">{sizeUsd > 0 ? fmt(liqPrice) : '—'}</span></div>
           <div className="ops-row"><span className="ops-l">Fee (0.05%)</span><span className="ops-v">{estFee > 0 ? `$${estFee.toFixed(4)}` : '—'}</span></div>
           <div className="ops-row"><span className="ops-l">Max Profit</span><span className="ops-v green">{notional > 0 ? `$${(notional * 0.08).toFixed(2)}` : '—'}</span></div>
         </div>
-
         <button
           className={`submit-btn ${direction === 'LONG' ? 'submit-long' : 'submit-short'}`}
           onClick={handleOpenPosition}
@@ -577,18 +855,36 @@ export default function App() {
         >
           {loading ? <span className="spinner" /> : `OPEN ${direction} ${TOKEN_SYMBOL[market]}`}
         </button>
-
         {txLog && <div className="tx-log">{txLog}</div>}
       </div>
-
       {positions.length > 0 && (
         <div className="op-positions">
           <div className="op-positions-title">Open Positions ({positions.length})</div>
           {positions.map(p => {
             const isUp = p.pnl >= 0;
+            const isComputing = computingIds.has(p.id);
             const liqP = p.direction === 'LONG'
               ? p.entryPrice * (1 - (1 / p.leverage) * 0.85)
               : p.entryPrice * (1 + (1 / p.leverage) * 0.85);
+            if (p.encrypted) {
+              return (
+                <div key={p.id} className="op-pos-card op-pos-card-enc">
+                  <div className="op-pos-top">
+                    <span className="op-pos-sym">{TOKEN_SYMBOL[p.market]} PERP</span>
+                    <span className={`pos-dir ${p.direction === 'LONG' ? 'L' : 'S'}`}>{p.direction}</span>
+                    <span className="pc-lev">{p.leverage}×</span>
+                    <span className="op-enc-badge">🔐 ENCRYPTED</span>
+                  </div>
+                  <div className="op-enc-info">Position encrypted via Arcium MXE</div>
+                  <div className="op-pos-btns">
+                    {isComputing
+                      ? <span className="pce-computing-label">🛡️ Decrypting...</span>
+                      : <button className="pos-btn reveal-b" onClick={() => handleRevealPosition(p.id)}>👁 Reveal PnL</button>
+                    }
+                  </div>
+                </div>
+              );
+            }
             return (
               <div key={p.id} className="op-pos-card">
                 <div className="op-pos-top">
@@ -618,8 +914,6 @@ export default function App() {
       )}
     </aside>
   );
-
-  // ── Markets page ──
 
   const renderMarketsPage = () => (
     <div className="tab-page">
@@ -657,11 +951,10 @@ export default function App() {
     </div>
   );
 
-  // ── Portfolio page ──
-
   const renderPortfolioPage = () => {
-    const totalPnl      = positions.reduce((a, p) => a + p.pnl, 0);
+    const totalPnl      = positions.filter(p => !p.encrypted).reduce((a, p) => a + p.pnl, 0);
     const totalNotional = positions.reduce((a, p) => a + p.notional, 0);
+    const encryptedCount = positions.filter(p => p.encrypted).length;
     return (
       <div className="tab-page">
         <div><div className="pg-title">PORTFOLIO</div><div className="pg-sub">Overview of your positions and account</div></div>
@@ -669,7 +962,13 @@ export default function App() {
           <div className="stat-card"><div className="sc-label">Wallet Balance</div><div className="sc-val ac">{balance != null ? `${balance.toFixed(4)} SOL` : '—'}</div></div>
           <div className="stat-card"><div className="sc-label">Open Positions</div><div className="sc-val pu">{positions.length}</div></div>
           <div className="stat-card"><div className="sc-label">Total Notional</div><div className="sc-val">${totalNotional.toFixed(2)}</div></div>
-          <div className="stat-card"><div className="sc-label">Unrealized PNL</div><div className={`sc-val ${totalPnl >= 0 ? 'up' : 'dn'}`}>{totalPnl >= 0 ? '+' : ''}${totalPnl.toFixed(2)}</div></div>
+          <div className="stat-card">
+            <div className="sc-label">Unrealized PNL</div>
+            <div className={`sc-val ${totalPnl >= 0 ? 'up' : 'dn'}`}>
+              {encryptedCount > 0 ? `🔐 ${encryptedCount} encrypted` : `${totalPnl >= 0 ? '+' : ''}$${totalPnl.toFixed(2)}`}
+            </div>
+            {encryptedCount > 0 && <div className="sc-sub">Reveal positions to see full PnL</div>}
+          </div>
         </div>
         {positions.length > 0 ? (
           <div className="data-table">
@@ -682,14 +981,16 @@ export default function App() {
                   <span className={`pos-dir ${p.direction === 'LONG' ? 'L' : 'S'}`}>{p.direction}</span>
                   <span className="muted mono">{p.leverage}×</span>
                   <span className="mono">{fmt(p.entryPrice)}</span>
-                  <span className={`mono ${up ? 'up' : 'dn'}`}>{fmt(p.currentPrice)}</span>
+                  <span className={`mono ${up ? 'up' : 'dn'}`}>{p.encrypted ? '🔐 —' : fmt(p.currentPrice)}</span>
                   <span className={`pnl-cell ${up ? 'up' : 'dn'}`}>
-                    {up ? '+' : ''}${Math.abs(p.pnl).toFixed(2)}{' '}
-                    <small>({up ? '+' : ''}{Math.abs(p.pnlPct).toFixed(2)}%)</small>
+                    {p.encrypted ? '🔐 Encrypted' : `${up ? '+' : ''}$${Math.abs(p.pnl).toFixed(2)}`}
                   </span>
                   <div className="pos-actions-cell">
-                    <button className="pos-btn close-b" onClick={() => handleClosePosition(p.id)}>✕ Close</button>
-                    <button className="pos-btn share-b" onClick={() => setSharePos(p)}>↗</button>
+                    {p.encrypted
+                      ? <button className="pos-btn reveal-b" onClick={() => handleRevealPosition(p.id)}>👁 Reveal</button>
+                      : <><button className="pos-btn close-b" onClick={() => handleClosePosition(p.id)}>✕ Close</button>
+                         <button className="pos-btn share-b" onClick={() => setSharePos(p)}>↗</button></>
+                    }
                   </div>
                 </div>
               );
@@ -701,8 +1002,6 @@ export default function App() {
       </div>
     );
   };
-
-  // ── History page ──
 
   const renderHistoryPage = () => (
     <div className="tab-page">
@@ -727,8 +1026,6 @@ export default function App() {
       </div>
     </div>
   );
-
-  // ── Share modal ──
 
   const renderShareModal = () => {
     if (!sharePos) return null;
@@ -780,13 +1077,8 @@ export default function App() {
     );
   };
 
-  // ════════════════════════════════════════════════
-  // Main render
-  // ════════════════════════════════════════════════
-
   return (
     <div className="app">
-
       <header className="navbar">
         <div className="brand" onClick={() => setTab('TRADE')}>
           <span className="brand-gem">S</span>
@@ -866,8 +1158,7 @@ export default function App() {
           </div>
 
           <div className="body">
-
-            <section className="chart-area">
+            <section className={`chart-area ${isChartExpanded ? 'chart-area-expanded' : ''}`}>
               <div className="chart-header-hud">
                 <div className="hud-left">
                   <label htmlFor="market-sel" className="sr-only">Select market</label>
@@ -884,9 +1175,17 @@ export default function App() {
                     <button key={tf} className={`hud-tf-btn ${timeframe === tf ? 'active' : ''}`}
                       onClick={() => handleTFChange(tf)}>{tf}</button>
                   ))}
+                  <div className="chart-type-divider" />
+                  <button className={`hud-tf-btn chart-type-btn ${chartType === 'candlestick' ? 'active' : ''}`}
+                    onClick={() => setChartType('candlestick')} title="Candlestick chart">🕯️</button>
+                  <button className={`hud-tf-btn chart-type-btn ${chartType === 'line' ? 'active' : ''}`}
+                    onClick={() => setChartType('line')} title="Line chart">〰</button>
                 </div>
                 <div className="hud-actions">
-                  <button className="fs-btn" onClick={toggleFullScreen} title="Fullscreen">⛶</button>
+                  <button className="fs-btn desktop-only" onClick={toggleFullScreen} title="Fullscreen">⛶</button>
+                  <button className="fs-btn mobile-only" onClick={toggleChartExpand} title={isChartExpanded ? 'Collapse' : 'Expand chart'}>
+                    {isChartExpanded ? '⊙' : '⛶'}
+                  </button>
                   <button className="buy-quick"  onClick={() => setDirection('LONG')}>▲ BUY</button>
                   <button className="sell-quick" onClick={() => setDirection('SHORT')}>▼ SELL</button>
                 </div>
@@ -909,6 +1208,9 @@ export default function App() {
                 <div className="ps-tabs">
                   <button className={`ps-tab ${posTab === 'POSITIONS' ? 'ps-tab-on' : ''}`} onClick={() => setPosTab('POSITIONS')}>
                     POSITIONS {positions.length > 0 && <span className="ps-count">{positions.length}</span>}
+                    {positions.filter(p => p.encrypted).length > 0 &&
+                      <span className="ps-count ps-enc-count">🔐{positions.filter(p => p.encrypted).length}</span>
+                    }
                   </button>
                   <button className={`ps-tab ${posTab === 'HISTORY' ? 'ps-tab-on' : ''}`} onClick={() => setPosTab('HISTORY')}>
                     HISTORY
@@ -921,7 +1223,6 @@ export default function App() {
             </section>
 
             {renderOrderPanel()}
-
           </div>
         </>
       )}
@@ -937,7 +1238,6 @@ export default function App() {
       </footer>
 
       {renderShareModal()}
-
     </div>
   );
 }
