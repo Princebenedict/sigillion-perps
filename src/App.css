@@ -290,6 +290,23 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 .lev-btn{flex:1;padding:4px 0;text-align:center;background:var(--surf2);border:1px solid var(--b1);color:var(--muted);font-size:0.52rem;font-weight:700;border-radius:2px;cursor:pointer;transition:all 0.15s;}
 .lev-btn:hover{border-color:var(--b2);color:var(--txt);}
 .lev-btn.lev-on{border-color:var(--acc);color:var(--acc);background:rgba(0,245,196,0.08);}
+
+/* ── TP / SL fields ── */
+.tpsl-row{display:grid;grid-template-columns:1fr 1fr;gap:6px;}
+.tpsl-field{position:relative;}
+.tpsl-inp{font-size:0.56rem !important;}
+.tp-lbl{color:var(--long) !important;}
+.sl-lbl{color:var(--short) !important;}
+.tp-label{color:var(--long);}
+.sl-label{color:var(--short);}
+.tpsl-pct{
+  position:absolute;right:32px;bottom:7px;
+  font-size:0.42rem;font-weight:700;
+  font-family:'Space Mono',monospace;
+  pointer-events:none;
+}
+.tp-pct{color:var(--long);}
+.sl-pct{color:var(--short);}
 .op-summary{background:var(--surf2);border-radius:3px;padding:7px 9px;display:flex;flex-direction:column;gap:4px;}
 .ops-row{display:flex;justify-content:space-between;align-items:center;}
 .ops-l{font-size:0.46rem;color:var(--muted);}

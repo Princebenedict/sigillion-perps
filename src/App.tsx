@@ -192,6 +192,8 @@ export default function App() {
   const [orderType,setOT]    =useState<'MARKET'|'LIMIT'>('MARKET');
   const [sizeStr,setSizeStr] =useState('');
   const [limitStr,setLimitStr]=useState('');
+  const [tpStr,setTpStr]     =useState('');
+  const [slStr,setSlStr]     =useState('');
   const [leverage,setLev]    =useState(5);
   const [loading,setLoading] =useState(false);
   const [txLog,setTxLog]     =useState('');
@@ -400,6 +402,32 @@ export default function App() {
         },0);
         return p;
       }
+      // TP hit
+      const tpVal = parseFloat(p.tp);
+      if(!isNaN(tpVal) && tpVal > 0){
+        const tpHit = p.direction==='LONG' ? cur >= tpVal : cur <= tpVal;
+        if(tpHit){
+          setTimeout(()=>{
+            setHistory(prev2=>[{...p,exitPrice:tpVal,closedAt:new Date().toLocaleTimeString(),status:'TP HIT',pnl:newPnl,pnlPct:newPnlPct},...prev2]);
+            setPositions(prev2=>prev2.filter(x=>x.id!==p.id));
+            showToast(`${TOKEN_SYMBOL[p.market]} Take Profit hit at ${fmt(tpVal)}`,'ok');
+          },0);
+          return p;
+        }
+      }
+      // SL hit
+      const slVal = parseFloat(p.sl);
+      if(!isNaN(slVal) && slVal > 0){
+        const slHit = p.direction==='LONG' ? cur <= slVal : cur >= slVal;
+        if(slHit){
+          setTimeout(()=>{
+            setHistory(prev2=>[{...p,exitPrice:slVal,closedAt:new Date().toLocaleTimeString(),status:'SL HIT',pnl:newPnl,pnlPct:newPnlPct},...prev2]);
+            setPositions(prev2=>prev2.filter(x=>x.id!==p.id));
+            showToast(`${TOKEN_SYMBOL[p.market]} Stop Loss hit at ${fmt(slVal)}`,'err');
+          },0);
+          return p;
+        }
+      }
       return{...p,currentPrice:cur,pnl:newPnl,pnlPct:newPnlPct};
     }));
   },[tickers,runPrivateLiquidationCheck]); // eslint-disable-line
@@ -444,7 +472,9 @@ export default function App() {
       const newPos:Position={
         id:Date.now(),market,direction,sizeUsd,leverage,notional,
         entryPrice:tick.price,currentPrice:tick.price,
-        pnl:0,pnlPct:0,tp:'',sl:'',
+        pnl:0,pnlPct:0,
+        tp:tpStr,
+        sl:slStr,
         timestamp:new Date().toLocaleTimeString(),
         encrypted:true,arciumJobId,
       };
@@ -453,6 +483,8 @@ export default function App() {
       setTxStatus('ok');
       showToast(`${direction} ${TOKEN_SYMBOL[market]} opened & encrypted`,'ok');
       setSizeStr('');
+      setTpStr('');
+      setSlStr('');
     }catch(err){
       setTxLog('Transaction failed. Please try again.');
       setTxStatus('err');
@@ -553,6 +585,12 @@ export default function App() {
                 <div className="pc-price-row"><span className="pc-pl">Entry</span><span className="pc-pv">{fmt(p.entryPrice)}</span></div>
                 <div className="pc-price-row"><span className="pc-pl">Mark</span><span className={`pc-pv ${isUp?'green':''}`}>{fmt(p.currentPrice)}</span></div>
                 <div className="pc-price-row"><span className="pc-pl">Liq</span><span className="pc-pv" style={{color:'var(--short)'}}>{fmt(liqP)}</span></div>
+                {p.tp && parseFloat(p.tp)>0 && (
+                  <div className="pc-price-row"><span className="pc-pl tp-label">TP</span><span className="pc-pv" style={{color:'var(--long)'}}>{fmt(parseFloat(p.tp))}</span></div>
+                )}
+                {p.sl && parseFloat(p.sl)>0 && (
+                  <div className="pc-price-row"><span className="pc-pl sl-label">SL</span><span className="pc-pv" style={{color:'var(--short)'}}>{fmt(parseFloat(p.sl))}</span></div>
+                )}
               </div>
               <div className="pc-pnl">
                 <span className={`pc-pnl-usd ${isUp?'up':'dn'}`}>{isUp?'+':''}${Math.abs(p.pnl).toFixed(2)}</span>
@@ -609,7 +647,7 @@ export default function App() {
                     <div className="hmc-badges">
                       <span className={`pos-dir ${h.direction==='LONG'?'L':'S'}`}>{h.direction}</span>
                       <span className="pc-lev">{h.leverage}x</span>
-                      <span className={`hmc-status ${isUp?'hmc-profit':'hmc-loss'}`}>{h.status==='LIQUIDATED'?'LIQ':isUp?'PROFIT':'LOSS'}</span>
+                      <span className={`hmc-status ${isUp?'hmc-profit':'hmc-loss'}`}>{h.status==='LIQUIDATED'?'LIQ':h.status==='TP HIT'?'TP':h.status==='SL HIT'?'SL':isUp?'PROFIT':'LOSS'}</span>
                     </div>
                   </div>
                   <div className="hmc-pnl">
@@ -682,11 +720,61 @@ export default function App() {
             ))}
           </div>
         </div>
+        <div className="tpsl-row">
+          <div className="field tpsl-field">
+            <span className="f-lbl tp-lbl">Take Profit</span>
+            <div className="f-row">
+              <input
+                className="f-inp tpsl-inp"
+                type="number"
+                placeholder={direction==='LONG' ? fmt(tick.price * 1.05) : fmt(tick.price * 0.95)}
+                value={tpStr}
+                onChange={e=>setTpStr(e.target.value)}
+                min="0"
+              />
+              <span className="f-unit">$</span>
+            </div>
+            {tpStr && parseFloat(tpStr) > 0 && (
+              <span className="tpsl-pct tp-pct">
+                {direction==='LONG'
+                  ? `+${(((parseFloat(tpStr)-tick.price)/tick.price)*leverage*100).toFixed(1)}%`
+                  : `+${(((tick.price-parseFloat(tpStr))/tick.price)*leverage*100).toFixed(1)}%`}
+              </span>
+            )}
+          </div>
+          <div className="field tpsl-field">
+            <span className="f-lbl sl-lbl">Stop Loss</span>
+            <div className="f-row">
+              <input
+                className="f-inp tpsl-inp"
+                type="number"
+                placeholder={direction==='LONG' ? fmt(tick.price * 0.95) : fmt(tick.price * 1.05)}
+                value={slStr}
+                onChange={e=>setSlStr(e.target.value)}
+                min="0"
+              />
+              <span className="f-unit">$</span>
+            </div>
+            {slStr && parseFloat(slStr) > 0 && (
+              <span className="tpsl-pct sl-pct">
+                {direction==='LONG'
+                  ? `-${(((tick.price-parseFloat(slStr))/tick.price)*leverage*100).toFixed(1)}%`
+                  : `-${(((parseFloat(slStr)-tick.price)/tick.price)*leverage*100).toFixed(1)}%`}
+              </span>
+            )}
+          </div>
+        </div>
         <div className="op-summary">
           <div className="ops-row"><span className="ops-l">Notional</span><span className="ops-v">{notional>0?`$${notional.toFixed(2)}`:'—'}</span></div>
           <div className="ops-row"><span className="ops-l">Liq. Price</span><span className="ops-v red">{sizeUsd>0?fmt(liqPrice):'—'}</span></div>
           <div className="ops-row"><span className="ops-l">Fee (0.05%)</span><span className="ops-v">{estFee>0?`$${estFee.toFixed(4)}`:'—'}</span></div>
           <div className="ops-row"><span className="ops-l">Max Profit</span><span className="ops-v green">{notional>0?`$${(notional*0.08).toFixed(2)}`:'—'}</span></div>
+          {tpStr && parseFloat(tpStr)>0 && (
+            <div className="ops-row"><span className="ops-l tp-label">Take Profit</span><span className="ops-v" style={{color:'var(--long)'}}>{fmt(parseFloat(tpStr))}</span></div>
+          )}
+          {slStr && parseFloat(slStr)>0 && (
+            <div className="ops-row"><span className="ops-l sl-label">Stop Loss</span><span className="ops-v" style={{color:'var(--short)'}}>{fmt(parseFloat(slStr))}</span></div>
+          )}
         </div>
         <button className={`submit-btn ${direction==='LONG'?'submit-long':'submit-short'}`} onClick={handleOpenPosition} disabled={loading}>
           {loading?<span className="spinner"/>:`OPEN ${direction} ${TOKEN_SYMBOL[market]}`}
@@ -911,7 +999,7 @@ export default function App() {
                   <div className="hmc-badges">
                     <span className={`pos-dir ${h.direction==='LONG'?'L':'S'}`}>{h.direction}</span>
                     <span className="pc-lev">{h.leverage}x</span>
-                    <span className={`hmc-status ${isUp?'hmc-profit':'hmc-loss'}`}>{h.status==='LIQUIDATED'?'LIQ':isUp?'PROFIT':'LOSS'}</span>
+                    <span className={`hmc-status ${isUp?'hmc-profit':'hmc-loss'}`}>{h.status==='LIQUIDATED'?'LIQ':h.status==='TP HIT'?'TP':h.status==='SL HIT'?'SL':isUp?'PROFIT':'LOSS'}</span>
                   </div>
                 </div>
                 <div className="hmc-pnl">
